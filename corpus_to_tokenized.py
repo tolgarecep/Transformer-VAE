@@ -6,8 +6,8 @@ tokenizer = AutoTokenizer.from_pretrained("dbmdz/bert-base-turkish-cased")
 # define go_x, x_eos
 import torch
 
-def batchify(train_path, val_path, N: int):
-  train_corpus = open(train_path, encoding='utf-8').read.splitlines()
+def batchify(path, N: int):
+  train_corpus = open(path, encoding='utf-8').read.splitlines()
   n = 0
   batches = []
   while n < N:
