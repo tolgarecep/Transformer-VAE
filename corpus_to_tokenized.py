@@ -6,7 +6,8 @@ def get_batch(x, vocab, max_length, truncation, device):
     go_x, x_eos = [], []
     max_len = max([len(s) for s in x])
     for s in x:
-        s = tokenizer.tokenize(s, max_length=max_length, truncation=True)
+        sentence = ' '.join(s)
+        s = tokenizer.tokenize(sentence, max_length=max_length, truncation=True)
         s_idx = [vocab.word2idx[w] if w in vocab.word2idx else vocab.unk for w in s]
         padding = [vocab.pad] * (max_len - len(s))
         go_x.append([vocab.go] + s_idx + padding)
