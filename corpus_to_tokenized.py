@@ -1,22 +1,30 @@
-# Turkish sentence corpus to inputs tokenized with BERTurk Tokenizer
-# !pip install transformers
-# truncation=True
+import torch
 from transformers import AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("dbmdz/bert-base-turkish-cased")
-import torch
 
-def batchify(path, vocab, N: int):
-  train_corpus = open(path, encoding='utf-8').read.splitlines()
-  n = 0
-  batches = []
-  while n < N:
-    batch = []
-    for s in train_corpus[n*N: n*N+N]:
-      s = tokenizer.tokenize(s, max_length=max_seq_length, truncation=True)
-      src = [vocab.go] + s
-      tgt = s + [vocab.eos]
-      # word2idx, pad
-      batches.append((torch.LongTensor(src).t().contiguous().to(device), \
-                      torch.LongTensor(tgt).t().contiguous().to(device)))
-    n += 1
-  return batches
+def get_batch(x, vocab, max_length, truncation, device):
+    go_x, x_eos = [], []
+    max_len = max([len(s) for s in x])
+    for s in x:
+        s = tokenizer.tokenize(s, max_length=max_length, truncation=True)
+        s_idx = [vocab.word2idx[w] if w in vocab.word2idx else vocab.unk for w in s]
+        padding = [vocab.pad] * (max_len - len(s))
+        go_x.append([vocab.go] + s_idx + padding)
+        x_eos.append(s_idx + [vocab.eos] + padding)
+    return torch.LongTensor(go_x).t().contiguous().to(device), \
+           torch.LongTensor(x_eos).t().contiguous().to(device)  # time * batch
+
+def get_batches(data, vocab, max_length, truncation, batch_size, device):
+    order = range(len(data))
+    z = sorted(zip(order, data), key=lambda i: len(i[1]))
+    order, data = zip(*z)
+
+    batches = []
+    i = 0
+    while i < len(data):
+        j = i
+        while j < min(len(data), i+batch_size) and len(data[j]) == len(data[i]):
+            j += 1
+        batches.append(get_batch(data[i: j], vocab, max_length, truncation, device))
+        i = j
+    return batches, order
