@@ -29,14 +29,14 @@ class TextModel(nn.Module):
         self.proj.bias.data.zero_()
         self.proj.weight.data.uniform_(-initrange, initrange)
 
-class VAE_INSERT(TextModel):
+class LSTM_VAE(TextModel):
     def __init__(self, vocab, args):
         super().__init__(vocab, args)
         self.drop = nn.Dropout(args.dropout)
-        #self.E = nn.LSTM(args.dim_emb, args.dim_h, args.nlayers,
-        #    dropout=args.dropout if args.nlayers > 1 else 0, bidirectional=True)
-        #self.G = nn.LSTM(args.dim_emb, args.dim_h, args.nlayers,
-        #    dropout=args.dropout if args.nlayers > 1 else 0)
+        self.E = nn.LSTM(args.dim_emb, args.dim_h, args.nlayers,
+            dropout=args.dropout if args.nlayers > 1 else 0, bidirectional=True)
+        self.G = nn.LSTM(args.dim_emb, args.dim_h, args.nlayers,
+            dropout=args.dropout if args.nlayers > 1 else 0)
         self.h2mu = nn.Linear(args.dim_h*2, args.dim_z)
         self.h2logvar = nn.Linear(args.dim_h*2, args.dim_z)
         self.z2emb = nn.Linear(args.dim_z, args.dim_emb)
@@ -118,17 +118,23 @@ class VAE_INSERT(TextModel):
             tmp.append(v.unsqueeze(-1))
         ll_is = torch.logsumexp(torch.cat(tmp, 1), 1) - np.log(m)
         return -ll_is
-      
-  class LSTM_VAE(VAE_INSERT):
+    
+class TRANSFORMER_VAE(TextModel):
+    """Transformer Variational Autoencoder"""
+    
     def __init__(self, vocab, args):
         super().__init__(vocab, args)
-        self.E = nn.LSTM(args.dim_emb, args.dim_h, args.nlayers,
-            dropout=args.dropout if args.nlayers > 1 else 0, bidirectional=True)
-        self.G = nn.LSTM(args.dim_emb, args.dim_h, args.nlayers,
-            dropout=args.dropout if args.nlayers > 1 else 0)
         
-
-  class T_VAE(VAE_INSERT):
-    def __init__(self, vocab, args):
-        super().__init__(vocab, args)
-        # implement transformer in seperate file
+    def encode(self, input):
+        input = self.drop(self.embed(input))
+        # recognition_transformer(src, tgt)
+        # or seperately apply positional encoding as in embedding
+        # no concat since nothing bidirectional?
+        return self.h2mu(h), self.h2logvar(h)
+    
+    def decode(self, input):
+        input = self.drop(self.embed(input)) + self.z2emb(z)
+        # generation_transformer()
+        # dropout, logits, projection
+        
+    # def autoenc
