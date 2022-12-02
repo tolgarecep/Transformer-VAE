@@ -13,12 +13,12 @@ def get_batch(x, vocab, device):
     return torch.LongTensor(go_x).t().contiguous().to(device), \
            torch.LongTensor(x_eos).t().contiguous().to(device)  # time * batch
 
-def get_batches(data, vocab, max_length, truncation, batch_size, device):
+def get_batches(data, vocab, batch_size, device):
     # Tokenize sentences with BERTurk tokenizer
     data_tokenized = []
     for i, s in enumerate(data):
         sentence = ' '.join(s)
-        tokenized = tokenizer.tokenize(sentence, max_length=max_length, truncation=truncation)
+        tokenized = tokenizer.tokenize(sentence)
         data_tokenized.append(tokenized)
 
     order = range(len(data_tokenized))
