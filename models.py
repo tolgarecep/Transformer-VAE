@@ -3,7 +3,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-# anything in vae class related to dae?
+
+from vae_transformer import RecognitionTransformer, GenerationTransformer
+
 def reparameterize(mu, logvar):
     std = torch.exp(0.5*logvar)
     eps = torch.randn_like(std)
@@ -17,7 +19,10 @@ def log_prob(z, mu, logvar):
 def loss_kl(mu, logvar):
     return -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()) / len(mu)
 
+
 class TextModel(nn.Module):
+    """Container module with word embedding and projection layers"""
+
     def __init__(self, vocab, args, initrange=0.1):
         super().__init__()
         self.vocab = vocab
@@ -28,6 +33,7 @@ class TextModel(nn.Module):
         self.embed.weight.data.uniform_(-initrange, initrange)
         self.proj.bias.data.zero_()
         self.proj.weight.data.uniform_(-initrange, initrange)
+
 
 class LSTM_VAE(TextModel):
     def __init__(self, vocab, args):
@@ -103,38 +109,45 @@ class LSTM_VAE(TextModel):
         # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
         #nn.utils.clip_grad_norm_(self.parameters(), clip)
         self.opt.step()
-
-    def nll_is(self, inputs, targets, m):
-        """compute negative log-likelihood by importance sampling:
-           p(x;theta) = E_{q(z|x;phi)}[p(z)p(x|z;theta)/q(z|x;phi)]
-        """
-        mu, logvar = self.encode(inputs)
-        tmp = []
-        for _ in range(m):
-            z = reparameterize(mu, logvar)
-            logits, _ = self.decode(z, inputs)
-            v = log_prob(z, torch.zeros_like(z), torch.zeros_like(z)) - \
-                self.loss_rec(logits, targets) - log_prob(z, mu, logvar)
-            tmp.append(v.unsqueeze(-1))
-        ll_is = torch.logsumexp(torch.cat(tmp, 1), 1) - np.log(m)
-        return -ll_is
-    
+        
 class TRANSFORMER_VAE(TextModel):
-    """Transformer Variational Autoencoder"""
+    """Encodes sequences to a latent representation with RecognitionTransformer,
+    then decodes it with GenerationTransformer. Distributions for sequences are learned
+    from the decoder stack output of RecognitionTransformer, and the logits for the input z vector learned
+    by GenerationTransformer is used in the computation of reconstruction loss."""
     
     def __init__(self, vocab, args):
         super().__init__(vocab, args)
-        
-    def encode(self, input):
-        input = self.drop(self.embed(input))
-        # recognition_transformer(src, tgt)
-        # or seperately apply positional encoding as in embedding
-        # no concat since nothing bidirectional?
-        return self.h2mu(h), self.h2logvar(h)
+        self.E = RecognitionTransformer(args)
+        self.h2mu = nn.Linear(args.r_d_model, args.dim_z)
+        self.h2logvar = nn.Linear(args.r_d_model, args.dim_z)
+        self.z2emb = nn.Linear(args.dim_z, args.dim_emb)
     
-    def decode(self, input):
-        input = self.drop(self.embed(input)) + self.z2emb(z)
-        # generation_transformer()
-        # dropout, logits, projection
+        self.G = GenerationTransformer(args)
+        self.opt = optim.Adam(self.parameters(), lr=args.lr, betas=(0.5, 0.999))
         
-    # def autoenc
+    def flatten(self):
+        self.E.flatten_parameters()
+        self.G.flatten_parameters()
+        
+    def forward(self, src, tgt):
+        h = self.E(src, tgt)
+        mu, logvar = h2mu(h), h2logvar(h)
+        z = reparametrize(mu, logvar)
+        logits = self.G(z, tgt)
+        return mu, logvar, z, logits
+    
+    def loss_rec(self, logits, targets):
+        loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1),
+            ignore_index=self.vocab.pad, reduction='none').view(targets.size())
+        return loss.sum(dim=0)
+    
+     def loss(self, losses):
+        return losses['rec'] + self.args.lambda_kl * losses['kl']
+
+    def autoenc(self, inputs, targets, is_train=False):
+        mu, logvar, _, logits = self(inputs, is_train)
+        return {'rec': self.loss_rec(logits, targets).mean(),
+                'kl': loss_kl(mu, logvar)}
+    
+    def generate()
