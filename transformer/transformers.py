@@ -1,7 +1,8 @@
 import torch
 from torch import nn
 
-from building_transformers import make_pad_mask, make_no_peak_mask, Encoder, Decoder, TransformerEmbedding
+from masking_embedding import make_pad_mask, make_no_peak_mask
+from encoder_decoder import Encoder, Decoder
 
 class RecognitionTransformer(nn.Module):
   def __init__(self, vocab, args):
