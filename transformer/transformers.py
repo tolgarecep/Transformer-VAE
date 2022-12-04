@@ -1,32 +1,7 @@
 import torch
 from torch import nn
 
-from decoders import GenerationDecoder, RecoginitonDecoder
-from encoders import GenerationEncoder, RecognitionEncoder
-
-def make_pad_mask(self, q, k):
-  len_q, len_k = q.size(1), k.size(1)
-
-  # batch_size x 1 x 1 x len_k
-  k = k.ne(self.src_pad_idx).unsqueeze(1).unsqueeze(2)
-  # batch_size x 1 x len_q x len_k
-  k = k.repeat(1, 1, len_q, 1)
-
-  # batch_size x 1 x len_q x 1
-  q = q.ne(self.src_pad_idx).unsqueeze(1).unsqueeze(3)
-  # batch_size x 1 x len_q x len_k
-  q = q.repeat(1, 1, 1, len_k)
-
-  mask = k & q
-  return mask
-
-def make_no_peak_mask(self, q, k):
-  len_q, len_k = q.size(1), k.size(1)
-
-  # len_q x len_k
-  mask = torch.tril(torch.ones(len_q, len_k)).type(torch.BoolTensor).to(self.device)
-
-  return mask
+from building_transformers import make_pad_mask, make_no_peak_mask, Encoder, Decoder, TransformerEmbedding
 
 class RecognitionTransformer(nn.Module):
   def __init__(self, vocab, args):
