@@ -6,7 +6,7 @@ from building_transformers import make_pad_mask, make_no_peak_mask, Encoder, Dec
 class RecognitionTransformer(nn.Module):
   def __init__(self, vocab, args):
     super().__init__()
-    self.encoder = RecognitionEncoder(d_model=args.r_d_model,
+    self.encoder = Encoder(d_model=args.r_d_model,
                                n_head=args.r_n_head,
                                max_len=args.max_len,
                                ffn_hidden=args.ffn_hidden,
@@ -14,7 +14,7 @@ class RecognitionTransformer(nn.Module):
                                drop_prob=args.dropout,
                                n_layers=args.r_n_layers,
                                device=args.device)
-    self.decoder = RecognitionDecoder(d_model=args.r_d_model,
+    self.decoder = Decoder(d_model=args.r_d_model,
                                n_head=args.r_n_head,
                                max_len=args.max_len,
                                ffn_hidden=args.ffn_hidden,
@@ -35,7 +35,7 @@ class RecognitionTransformer(nn.Module):
 class GenerationTransformer(nn.Module):
   def __init__(self, vocab, args):
     super().__init__()
-    self.encoder = GenerationEncoder(d_model=args.g_d_model,
+    self.encoder = Encoder(d_model=args.g_d_model,
                                n_head=args.g_n_head,
                                max_len=args.max_len,
                                ffn_hidden=args.ffn_hidden,
@@ -43,7 +43,7 @@ class GenerationTransformer(nn.Module):
                                drop_prob=args.dropout,
                                n_layers=args.g_n_layers,
                                device=args.device)
-    self.decoder = GenerationDecoder(d_model=args.g_d_model,
+    self.decoder = Decoder(d_model=args.g_d_model,
                                n_head=args.g_n_head,
                                max_len=args.max_len,
                                ffn_hidden=args.ffn_hidden,
@@ -51,6 +51,7 @@ class GenerationTransformer(nn.Module):
                                drop_prob=args.dropout,
                                n_layers=args.g_n_layers,
                                device=args.device)
+    self.linear = nn.Linear(args.g_d_model, vocab.size)
     
   def forward(self, src, trg):
     src_mask = make_pad_mask(src, src)
@@ -58,5 +59,6 @@ class GenerationTransformer(nn.Module):
     trg_mask = make_pad_mask(trg, trg) * make_no_peak_mask(trg, trg)
     
     enc_src = self.encoder(src, src_mask)
-    decoder_stack_output = self.decoder(trg, enc_src, trg_mask, src_trg_mask)
-    return decoder_stack_output
+    trg = self.decoder(trg, enc_src, trg_mask, src_trg_mask)
+    output = self.linear(trg)
+    return output
