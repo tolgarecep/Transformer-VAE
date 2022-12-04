@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
-from vae_transformer import RecognitionTransformer, GenerationTransformer
+from transformer.transformers import RecognitionTransformer, GenerationTransformer
 
 def reparameterize(mu, logvar):
     std = torch.exp(0.5*logvar)
