@@ -57,7 +57,7 @@ class RecognitionTransformer(nn.Module):
     decoder_stack_output = self.decoder(trg, enc_src, trg_mask, src_trg_mask)
     return decoder_stack_output
   
-class GenerationTrasnformer(nn.Module):
+class GenerationTransformer(nn.Module):
   def __init__(self, vocab, args):
     super().__init__()
     self.encoder = GenerationEncoder(d_model=args.g_d_model,
