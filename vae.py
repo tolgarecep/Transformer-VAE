@@ -141,7 +141,7 @@ class TRANSFORMER_VAE(TextModel):
     def forward(self, src, trg, is_train=False):
         mu, logvar = self.recognition(src, trg)
         z = reparametrize(mu, logvar)
-        logits = self.generation(z, src, tgt)
+        logits = self.generation(z, src, trg)
         return mu, logvar, z, logits
     
     def loss_rec(self, logits, targets):
