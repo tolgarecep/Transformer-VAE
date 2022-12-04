@@ -103,5 +103,3 @@ class TransformerEmbedding(nn.Module):
         tok_emb = self.tok_emb(x)
         pos_emb = self.pos_emb(x)
         return self.drop_out(tok_emb + pos_emb)
-      
-"""Encoder & Decoder"""
