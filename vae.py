@@ -118,23 +118,30 @@ class TRANSFORMER_VAE(TextModel):
     
     def __init__(self, vocab, args):
         super().__init__(vocab, args)
-        self.E = RecognitionTransformer(args)
+        self.E = RecognitionTransformer() # args
+        self.G = GenerationTransformer() # args
         self.h2mu = nn.Linear(args.r_d_model, args.dim_z)
         self.h2logvar = nn.Linear(args.r_d_model, args.dim_z)
         self.z2emb = nn.Linear(args.dim_z, args.dim_emb)
-    
-        self.G = GenerationTransformer(args)
         self.opt = optim.Adam(self.parameters(), lr=args.lr, betas=(0.5, 0.999))
         
     def flatten(self):
         self.E.flatten_parameters()
         self.G.flatten_parameters()
         
-    def forward(self, src, tgt):
-        h = self.E(src, tgt)
-        mu, logvar = h2mu(h), h2logvar(h)
+    def recognition(self, src, trg):
+        h = self.E(src, trg) # decoder stack output of the transformer
+        return self.h2mu(h), self. h2logvar(h)
+        
+    def generation(self, z, src, trg):
+        return self.G(z, src, trg) # logits of the transformer
+    
+    def generate(): # z to sentence
+        
+    def forward(self, src, trg, is_train=False):
+        mu, logvar = self.recognition(src, trg)
         z = reparametrize(mu, logvar)
-        logits = self.G(z, tgt)
+        logits = self.generation(z, src, tgt)
         return mu, logvar, z, logits
     
     def loss_rec(self, logits, targets):
@@ -142,12 +149,15 @@ class TRANSFORMER_VAE(TextModel):
             ignore_index=self.vocab.pad, reduction='none').view(targets.size())
         return loss.sum(dim=0)
     
-     def loss(self, losses):
+    def loss(self, losses):
         return losses['rec'] + self.args.lambda_kl * losses['kl']
 
-    def autoenc(self, inputs, targets, is_train=False):
-        mu, logvar, _, logits = self(inputs, is_train)
+    def autoenc(self, src, trgs, is_train=False):
+        mu, logvar, _, logits = self(srcs, trgs, is_train)
         return {'rec': self.loss_rec(logits, targets).mean(),
                 'kl': loss_kl(mu, logvar)}
     
-    def generate()
+    def step(self, losses):
+        self.opt.zero_grad()
+        losses['loss'].backward()
+        self.opt.step()
