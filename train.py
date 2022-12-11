@@ -40,7 +40,7 @@ parser.add_argument('--dropout', type=float, default=0.5, metavar='DROP',
 parser.add_argument('--lambda_kl', type=float, default=0, metavar='R',
                     help='weight for kl term in VAE')
 # Transformer arguments
-parser.add_argument('--nhead', type=int, default=6, metavar='N',
+parser.add_argument('--nhead', type=int, default=8, metavar='N',
                     help='number of heads in the multiheadattention models')
 parser.add_argument('--dim_feedforward', type=int, default=2048, metavar='D',
                     help='dimension of the feedforward network model')
