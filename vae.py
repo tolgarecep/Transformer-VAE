@@ -4,8 +4,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
-from transformer.transformers import RecognitionTransformer, GenerationTransformer
-
 def reparameterize(mu, logvar):
     std = torch.exp(0.5*logvar)
     eps = torch.randn_like(std)
@@ -20,33 +18,136 @@ def loss_kl(mu, logvar):
     return -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()) / len(mu)
 
 
-class TextModel(nn.Module):
-    """Container module with word embedding and projection layers"""
-
+class VAE(nn.Module):
     def __init__(self, vocab, args, initrange=0.1):
         super().__init__()
         self.vocab = vocab
         self.args = args
-        self.embed = nn.Embedding(vocab.size, args.dim_emb)
+        self.embed = nn.Embedding(vocab.size, args.dim_emb if args.model_type == 'lstm' else args.dim_h)
+        self.h2mu = nn.Linear(args.dim_h*2 if args.model_type == 'lstm' else args.dim_h, args.dim_z)
+        self.h2logvar = nn.Linear(args.dim_h*2 if args.model_type == 'lstm' else args.dim_h, args.dim_z)
+        self.z2emb = nn.Linear(args.dim_z, args.dim_emb if args.model_type == 'lstm' else args.dim_h)
         self.proj = nn.Linear(args.dim_h, vocab.size)
-
+        self.opt = optim.Adam(self.parameters(), lr=args.lr, betas=(0.5, 0.999))
+        
         self.embed.weight.data.uniform_(-initrange, initrange)
         self.proj.bias.data.zero_()
         self.proj.weight.data.uniform_(-initrange, initrange)
 
 
-class LSTM_VAE(TextModel):
+def generate_square_subsequent_mask(sz: int):
+    """Generates an upper-triangular matrix of -inf, with zeros on diag."""
+    return torch.triu(torch.ones(sz, sz) * float('-inf'), diagonal=1)
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, dropout, max_len):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-torch.log(10000.0) / d_model))
+        pe = torch.zeros(max_len, 1, d_model)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)
+        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        """
+        Args:
+            x: Tensor, shape [seq_len, batch_size, embedding_dim]
+        """
+        x = x + self.pe[:x.size(0)]
+        return self.dropout(x)
+
+
+class TRANSFORMER_VAE(VAE):
+    """Transformer based Variational Auto-encoder"""
+
     def __init__(self, vocab, args):
+        super().__init__()
+        cuda = not args.no_cuda and torch.cuda.is_available()
+        self.device = torch.device('cuda' if cuda else 'cpu')
+        self.pe = PositionalEncoding(d_model=args.dim_h, dropout=args.dropout, max_len=args.max_len)
+        # TransformerEncoderLayer is made up of self-attn and feedforward network.
+        self.EncoderStack = nn.ModuleList([nn.TransformerEncoderLayer(
+            d_model=args.d_model, nhead=args.nhead, dim_feedforward=args.dim_feedforward, dropout=args.dropout) 
+            for _ in range(args.nlayers)])
+        # TransformerDecoderLayer is made up of self-attn, multi-head-attn and feedforward network.
+        self.DecoderStack = nn.ModuleList([nn.TransformerDecoderLayer(
+            d_model=args.d_model, nhead=args.nhead, dim_feedforward=args.dim_feedforward, dropout=args.dropout) 
+            for _ in range(args.nlayers)])
+
+    def flatten(self):
+        self.EncoderStack.flatten_parameters()
+        self.DecoderStack.flatten_parameters()
+        
+    def encode(self, src):
+        x = self.dropout(self.pe(self.embed(src)))
+        for layer in self.EncoderStack:
+            x = layer(x)
+        return self.h2mu(x), self.h2logvar(x)
+
+    def decode(self, z, trg):
+        trg_mask = generate_square_subsequent_mask(trg.shape[1])
+        x = self.dropout(self.pe(self.embed(trg)))
+        for layer in self.DecoderStack:
+            x = layer(tgt=x, memory=z, tgt_mask=trg_mask)
+        logits = self.proj(x)
+        return logits
+
+    def forward(self, src, trg, pad_idx=0):
+        mu, logvar = self.encode(src, pad_idx)
+        z = reparameterize(mu, logvar)
+        logits = self.decode(z, trg, pad_idx)
+        return mu, logvar, z, logits
+
+    def loss_rec(self, logits, targets):
+        loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1),
+            ignore_index=self.vocab.pad, reduction='none').view(targets.size())
+        return loss.sum(dim=0)
+
+    def loss(self, losses):
+        return losses['rec'] + self.args.lambda_kl * losses['kl']
+
+    def autoenc(self, inputs, targets, is_train=False):
+        mu, logvar, _, logits = self(inputs, targets, is_train)
+        return {'rec': self.loss_rec(logits, targets).mean(),
+                'kl': loss_kl(mu, logvar)}
+
+    def step(self, losses):
+        self.opt.zero_grad()
+        losses['loss'].backward()
+        self.opt.step()
+
+    def generate(self, z, max_len, alg):
+        assert alg in ['greedy' , 'sample' , 'top5']
+        sents = []
+        input = torch.zeros(1, len(z), dtype=torch.long, device=z.device).fill_(self.vocab.go)
+        hidden = None
+        for l in range(max_len):
+            sents.append(input)
+            logits, hidden = self.decode(z, input, hidden)
+            if alg == 'greedy':
+                input = logits.argmax(dim=-1)
+            elif alg == 'sample':
+                input = torch.multinomial(logits.squeeze(dim=0).exp(), num_samples=1).t()
+            elif alg == 'top5':
+                not_top5_indices=logits.topk(logits.shape[-1]-5,dim=2,largest=False).indices
+                logits_exp=logits.exp()
+                logits_exp[:,:,not_top5_indices]=0.
+                input = torch.multinomial(logits_exp.squeeze(dim=0), num_samples=1).t()
+        return torch.cat(sents)
+
+class LSTM_VAE(VAE):
+    """LSTM based Variational Auto-encoder"""
+
+    def __init__(self, vocab, args, initrange=0.1):
         super().__init__(vocab, args)
         self.drop = nn.Dropout(args.dropout)
         self.E = nn.LSTM(args.dim_emb, args.dim_h, args.nlayers,
             dropout=args.dropout if args.nlayers > 1 else 0, bidirectional=True)
         self.G = nn.LSTM(args.dim_emb, args.dim_h, args.nlayers,
             dropout=args.dropout if args.nlayers > 1 else 0)
-        self.h2mu = nn.Linear(args.dim_h*2, args.dim_z)
-        self.h2logvar = nn.Linear(args.dim_h*2, args.dim_z)
-        self.z2emb = nn.Linear(args.dim_z, args.dim_emb)
-        self.opt = optim.Adam(self.parameters(), lr=args.lr, betas=(0.5, 0.999))
 
     def flatten(self):
         self.E.flatten_parameters()
@@ -84,7 +185,7 @@ class LSTM_VAE(TextModel):
                 input = torch.multinomial(logits_exp.squeeze(dim=0), num_samples=1).t()
         return torch.cat(sents)
 
-    def forward(self, input, is_train=False):
+    def forward(self, input):
         mu, logvar = self.encode(input)
         z = reparameterize(mu, logvar)
         logits, _ = self.decode(z, input)
@@ -103,60 +204,6 @@ class LSTM_VAE(TextModel):
         return {'rec': self.loss_rec(logits, targets).mean(),
                 'kl': loss_kl(mu, logvar)}
 
-    def step(self, losses):
-        self.opt.zero_grad()
-        losses['loss'].backward()
-        # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
-        #nn.utils.clip_grad_norm_(self.parameters(), clip)
-        self.opt.step()
-        
-class TRANSFORMER_VAE(TextModel):
-    """Encodes sequences to a latent representation with RecognitionTransformer,
-    then decodes it with GenerationTransformer. Distributions for sequences are learned
-    from the decoder stack output of RecognitionTransformer, and the logits for the input z vector learned
-    by GenerationTransformer is used in the computation of reconstruction loss."""
-    
-    def __init__(self, vocab, args):
-        super().__init__(vocab, args)
-        self.E = RecognitionTransformer() # args
-        self.G = GenerationTransformer() # args
-        self.h2mu = nn.Linear(args.r_d_model, args.dim_z)
-        self.h2logvar = nn.Linear(args.r_d_model, args.dim_z)
-        self.z2emb = nn.Linear(args.dim_z, args.dim_emb)
-        self.opt = optim.Adam(self.parameters(), lr=args.lr, betas=(0.5, 0.999))
-        
-    def flatten(self):
-        self.E.flatten_parameters()
-        self.G.flatten_parameters()
-        
-    def recognition(self, src, trg):
-        h = self.E(src, trg) # decoder stack output of the transformer
-        return self.h2mu(h), self. h2logvar(h)
-        
-    def generation(self, z, src, trg):
-        return self.G(z, src, trg) # logits of the transformer
-    
-    def generate(): # z to sentence
-        
-    def forward(self, src, trg, is_train=False):
-        mu, logvar = self.recognition(src, trg)
-        z = reparametrize(mu, logvar)
-        logits = self.generation(z, src, trg)
-        return mu, logvar, z, logits
-    
-    def loss_rec(self, logits, targets):
-        loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1),
-            ignore_index=self.vocab.pad, reduction='none').view(targets.size())
-        return loss.sum(dim=0)
-    
-    def loss(self, losses):
-        return losses['rec'] + self.args.lambda_kl * losses['kl']
-
-    def autoenc(self, src, trgs, is_train=False):
-        mu, logvar, _, logits = self(srcs, trgs, is_train)
-        return {'rec': self.loss_rec(logits, targets).mean(),
-                'kl': loss_kl(mu, logvar)}
-    
     def step(self, losses):
         self.opt.zero_grad()
         losses['loss'].backward()
