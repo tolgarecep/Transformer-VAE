@@ -19,16 +19,16 @@ def loss_kl(mu, logvar):
 
 
 class VAE(nn.Module):
-    def __init__(self, vocab, args, initrange=0.1):
+    def __init__(self, vocab, args, device, initrange=0.1):
         super().__init__()
         self.vocab = vocab
         self.args = args
-        self.embed = nn.Embedding(vocab.size, args.dim_emb if args.model_type == 'lstm' else args.dim_h)
-        self.h2mu = nn.Linear(args.dim_h*2 if args.model_type == 'lstm' else args.dim_h, args.dim_z)
-        self.h2logvar = nn.Linear(args.dim_h*2 if args.model_type == 'lstm' else args.dim_h, args.dim_z)
-        self.z2emb = nn.Linear(args.dim_z, args.dim_emb if args.model_type == 'lstm' else args.dim_h)
-        self.proj = nn.Linear(args.dim_h, vocab.size)
-        self.opt = optim.Adam(self.parameters(), lr=args.lr, betas=(0.5, 0.999))
+        self.embed = nn.Embedding(vocab.size, args.dim_emb if args.model_type == 'lstm' else args.dim_h).to(device)
+        self.h2mu = nn.Linear(args.dim_h*2 if args.model_type == 'lstm' else args.dim_h, args.dim_z).to(device)
+        self.h2logvar = nn.Linear(args.dim_h*2 if args.model_type == 'lstm' else args.dim_h, args.dim_z).to(device)
+        self.z2emb = nn.Linear(args.dim_z, args.dim_emb if args.model_type == 'lstm' else args.dim_h).to(device)
+        self.proj = nn.Linear(args.dim_h, vocab.size).to(device)
+        self.opt = optim.Adam(self.parameters(), lr=args.lr, betas=(0.5, 0.999)).to(device)
         
         self.embed.weight.data.uniform_(-initrange, initrange)
         self.proj.bias.data.zero_()
@@ -67,38 +67,39 @@ class TRANSFORMER_VAE(VAE):
         super().__init__()
         cuda = not args.no_cuda and torch.cuda.is_available()
         self.device = torch.device('cuda' if cuda else 'cpu')
-        self.pe = PositionalEncoding(d_model=args.dim_h, dropout=args.dropout, max_len=args.max_len)
+        self.pe = PositionalEncoding(d_model=args.dim_h, dropout=args.dropout, max_len=args.max_len).to(self.device).to(self.device)
         # TransformerEncoderLayer is made up of self-attn and feedforward network.
         self.EncoderStack = nn.ModuleList([nn.TransformerEncoderLayer(
-            d_model=args.d_model, nhead=args.nhead, dim_feedforward=args.dim_feedforward, dropout=args.dropout) 
-            for _ in range(args.nlayers)])
+            d_model=args.dim_h, nhead=args.nhead, dim_feedforward=args.dim_feedforward, dropout=args.dropout) 
+            for _ in range(args.nlayers)]).to(self.device)
         # TransformerDecoderLayer is made up of self-attn, multi-head-attn and feedforward network.
         self.DecoderStack = nn.ModuleList([nn.TransformerDecoderLayer(
-            d_model=args.d_model, nhead=args.nhead, dim_feedforward=args.dim_feedforward, dropout=args.dropout) 
-            for _ in range(args.nlayers)])
+            d_model=args.dim_h, nhead=args.nhead, dim_feedforward=args.dim_feedforward, dropout=args.dropout) 
+            for _ in range(args.nlayers)]).to(self.device)
 
     def flatten(self):
         self.EncoderStack.flatten_parameters()
         self.DecoderStack.flatten_parameters()
         
     def encode(self, src):
-        x = self.dropout(self.pe(self.embed(src)))
+        x = self.pe(self.embed(src))
         for layer in self.EncoderStack:
             x = layer(x)
         return self.h2mu(x), self.h2logvar(x)
 
-    def decode(self, z, trg):
-        trg_mask = generate_square_subsequent_mask(trg.shape[1])
-        x = self.dropout(self.pe(self.embed(trg)))
+    def decode(self, src, z, trg):
+        trg_mask = generate_square_subsequent_mask(trg.shape[0])
+        x = self.pe(self.embed(trg))
+        memory = self.pe(self.embed(src)) + self.z2emb(z)
         for layer in self.DecoderStack:
-            x = layer(tgt=x, memory=z, tgt_mask=trg_mask)
+            x = layer(tgt=x, memory=memory, tgt_mask=trg_mask)
         logits = self.proj(x)
         return logits
 
-    def forward(self, src, trg, pad_idx=0):
-        mu, logvar = self.encode(src, pad_idx)
+    def forward(self, src, trg):
+        mu, logvar = self.encode(src)
         z = reparameterize(mu, logvar)
-        logits = self.decode(z, trg, pad_idx)
+        logits = self.decode(src, z, trg)
         return mu, logvar, z, logits
 
     def loss_rec(self, logits, targets):
@@ -118,15 +119,14 @@ class TRANSFORMER_VAE(VAE):
         self.opt.zero_grad()
         losses['loss'].backward()
         self.opt.step()
-
+"""
     def generate(self, z, max_len, alg):
         assert alg in ['greedy' , 'sample' , 'top5']
         sents = []
         input = torch.zeros(1, len(z), dtype=torch.long, device=z.device).fill_(self.vocab.go)
-        hidden = None
         for l in range(max_len):
             sents.append(input)
-            logits, hidden = self.decode(z, input, hidden)
+            logits = self.decode(z, input)
             if alg == 'greedy':
                 input = logits.argmax(dim=-1)
             elif alg == 'sample':
@@ -136,7 +136,7 @@ class TRANSFORMER_VAE(VAE):
                 logits_exp=logits.exp()
                 logits_exp[:,:,not_top5_indices]=0.
                 input = torch.multinomial(logits_exp.squeeze(dim=0), num_samples=1).t()
-        return torch.cat(sents)
+        return torch.cat(sents)"""
 
 class LSTM_VAE(VAE):
     """LSTM based Variational Auto-encoder"""
