@@ -22,7 +22,7 @@ parser.add_argument('--load-model', default='', metavar='FILE',
 # VAE arguments
 parser.add_argument('--vocab-size', type=int, default=10000, metavar='N',
                     help='keep N most frequent words in vocabulary')
-parser.add_argument('--model_type', default='dae', metavar='M',
+parser.add_argument('--model_type', metavar='M',
                     choices=['lstm', 'transformer'],
                     help='which model to learn')
 parser.add_argument('--dim_emb', type=int, default=512, metavar='D',
