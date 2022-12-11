@@ -34,7 +34,7 @@ parser.add_argument('--dim_h', type=int, default=1024, metavar='D',
                         Transformer: dimension of encoder/decoder inputs')
 parser.add_argument('--nlayers', type=int, default=1, metavar='N',
                     help='LSTM: number of layers, \
-                        Transformer: number of encoder/decoder stacks')
+                        Transformer: number of encoder/decoder layers in encoder/decoder stacks')
 parser.add_argument('--dropout', type=float, default=0.5, metavar='DROP',
                     help='dropout probability (0 = no dropout)')
 parser.add_argument('--lambda_kl', type=float, default=0, metavar='R',
