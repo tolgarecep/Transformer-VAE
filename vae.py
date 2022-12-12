@@ -20,7 +20,7 @@ def loss_kl(mu, logvar):
 
 class VAE(nn.Module):
     def __init__(self, vocab, args, device, initrange=0.1):
-        super().__init__()
+        super().__init__(vocab, args, device)
         self.vocab = vocab
         self.args = args
         self.embed = nn.Embedding(vocab.size, args.dim_emb if args.model_type == 'lstm' else args.dim_h).to(device)
@@ -63,8 +63,8 @@ class PositionalEncoding(nn.Module):
 class TRANSFORMER_VAE(VAE):
     """Transformer based Variational Auto-encoder"""
 
-    def __init__(self, vocab, args):
-        super().__init__()
+    def __init__(self, vocab, args, device):
+        super().__init__(vocab, args, device)
         cuda = not args.no_cuda and torch.cuda.is_available()
         self.device = torch.device('cuda' if cuda else 'cpu')
         self.pe = PositionalEncoding(d_model=args.dim_h, dropout=args.dropout, max_len=args.max_len).to(self.device).to(self.device)
