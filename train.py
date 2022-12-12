@@ -7,7 +7,7 @@ import random
 
 from utils import AverageMeter, logging, set_seed
 from corpus_to_tokenized import Vocab, load_sent, get_tokenized_batches
-from vaes import LSTM_VAE, TRANSFORMER_VAE
+from vae import LSTM_VAE, TRANSFORMER_VAE
 
 parser = argparse.ArgumentParser()
 # Path arguments
