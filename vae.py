@@ -20,7 +20,7 @@ def loss_kl(mu, logvar):
 
 class VAE(nn.Module):
     def __init__(self, vocab, args, device, initrange=0.1):
-        super().__init__(vocab, args, device)
+        super().__init__()
         self.vocab = vocab
         self.args = args
         self.embed = nn.Embedding(vocab.size, args.dim_emb if args.model_type == 'lstm' else args.dim_h).to(device)
