@@ -149,5 +149,4 @@ def main(args):
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    args.noise = [float(x) for x in args.noise.split(',')]
     main(args)
