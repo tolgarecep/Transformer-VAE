@@ -118,7 +118,7 @@ def main(args):
         random.shuffle(indices)
         for i, idx in enumerate(indices):
             inputs, targets = train_batches[idx]
-            losses = model.autoenc(inputs, targets, is_train=True)
+            losses = model.autoenc(inputs, targets)
             losses['loss'] = model.loss(losses)
             model.step(losses)
             for k, v in losses.items():
