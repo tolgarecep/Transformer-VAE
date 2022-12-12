@@ -99,7 +99,7 @@ def main(args):
 
 
     model = {'lstm': LSTM_VAE, 'transformer': TRANSFORMER_VAE}[args.model_type](
-        vocab, args).to(device)
+        vocab, args, device).to(device)
     if args.load_model:
         ckpt = torch.load(args.load_model)
         model.load_state_dict(ckpt['model'])
