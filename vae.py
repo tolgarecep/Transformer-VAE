@@ -28,7 +28,7 @@ class VAE(nn.Module):
         self.h2logvar = nn.Linear(args.dim_h*2 if args.model_type == 'lstm' else args.dim_h, args.dim_z).to(device)
         self.z2emb = nn.Linear(args.dim_z, args.dim_emb if args.model_type == 'lstm' else args.dim_h).to(device)
         self.proj = nn.Linear(args.dim_h, vocab.size).to(device)
-        self.opt = optim.Adam(self.parameters(), lr=args.lr, betas=(0.5, 0.999)).to(device)
+        self.opt = optim.Adam(self.parameters(), lr=args.lr, betas=(0.5, 0.999))
         
         self.embed.weight.data.uniform_(-initrange, initrange)
         self.proj.bias.data.zero_()
