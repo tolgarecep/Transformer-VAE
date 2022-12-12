@@ -92,7 +92,7 @@ class TRANSFORMER_VAE(VAE):
         x = self.pe(self.embed(trg))
         memory = self.pe(self.embed(src)) + self.z2emb(z)
         for layer in self.DecoderStack:
-            x = layer(tgt=x, memory=memory, tgt_mask=trg_mask)
+            x = layer(tgt=x, memory=memory.to(self.device), tgt_mask=trg_mask.to(self.device))
         logits = self.proj(x)
         return logits
 
