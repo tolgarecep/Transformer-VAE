@@ -1,4 +1,4 @@
-# Transformer & LSTM based Variational Autoencoders
+# Transformer based & LSTM based Variational Autoencoders
 ## Training
 `vocab.txt` in `checkpoints/model_type` is used as vocabulary.
 ### Transformer-VAE
