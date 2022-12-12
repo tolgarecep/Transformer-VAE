@@ -110,8 +110,8 @@ class TRANSFORMER_VAE(VAE):
     def loss(self, losses):
         return losses['rec'] + self.args.lambda_kl * losses['kl']
 
-    def autoenc(self, inputs, targets, is_train=False):
-        mu, logvar, _, logits = self(inputs, targets, is_train)
+    def autoenc(self, inputs, targets):
+        mu, logvar, _, logits = self(inputs, targets)
         return {'rec': self.loss_rec(logits, targets).mean(),
                 'kl': loss_kl(mu, logvar)}
 
@@ -199,8 +199,8 @@ class LSTM_VAE(VAE):
     def loss(self, losses):
         return losses['rec'] + self.args.lambda_kl * losses['kl']
 
-    def autoenc(self, inputs, targets, is_train=False):
-        mu, logvar, _, logits = self(inputs, is_train)
+    def autoenc(self, inputs, targets):
+        mu, logvar, _, logits = self(inputs)
         return {'rec': self.loss_rec(logits, targets).mean(),
                 'kl': loss_kl(mu, logvar)}
 
