@@ -94,10 +94,6 @@ def main(args):
     cuda = not args.no_cuda and torch.cuda.is_available()
     device = torch.device('cuda' if cuda else 'cpu')
 
-
-    """TO DEVICE"""
-
-
     model = {'lstm': LSTM_VAE, 'transformer': TRANSFORMER_VAE}[args.model_type](vocab, args, device).to(device)
     if args.load_model:
         ckpt = torch.load(args.load_model)
@@ -117,8 +113,8 @@ def main(args):
         indices = list(range(len(train_batches)))
         random.shuffle(indices)
         for i, idx in enumerate(indices):
-            inputs, targets = train_batches[idx]
-            losses = model.autoenc(inputs, targets)
+            enc_inputs, dec_inputs, targets = train_batches[idx]
+            losses = model.autoenc(enc_inputs, dec_inputs, targets)
             losses['loss'] = model.loss(losses)
             model.step(losses)
             for k, v in losses.items():
