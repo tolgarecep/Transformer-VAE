@@ -44,22 +44,25 @@ def load_sent(path):
     return sents
 
 def get_batch(x, vocab, device):
-    go_x, x_eos = [], []
+    enc_input, dec_input, target = [], [], []
     max_len = max([len(s) for s in x])
     for s in x:
         s_idx = [vocab.word2idx[w] if w in vocab.word2idx else vocab.unk for w in s]
         padding = [vocab.pad] * (max_len - len(s))
-        go_x.append([vocab.go] + s_idx + padding)
-        x_eos.append(s_idx + [vocab.eos] + padding)
-    return torch.LongTensor(go_x).t().contiguous().to(device), \
-           torch.LongTensor(x_eos).t().contiguous().to(device)  # time * batch
+        enc_input.append([vocab.go] + s_idx + padding + [vocab.eos])
+        dec_input.append([vocab.go] + s_idx + padding)
+        target.append(s_idx + padding + [vocab.eos])
+    return torch.LongTensor(enc_input).t().contiguous().to(device), \
+           torch.LongTensor(dec_input).t().contiguous().to(device), \
+           torch.LongTensor(target).t().contiguous().to(device)  # time * batch
 
-def get_tokenized_batches(data, max_len, vocab, batch_size, device):
+
+def get_tokenized_batches(data, vocab, batch_size, device):
     # Tokenize sentences with BERTurk tokenizer
     data_tokenized = []
     for i, s in enumerate(data):
         sentence = ' '.join(s)
-        tokenized = tokenizer.tokenize(sentence, max_length=max_len, truncation=True)
+        tokenized = tokenizer.tokenize(sentence)
         data_tokenized.append(tokenized)
 
     order = range(len(data_tokenized))
