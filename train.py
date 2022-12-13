@@ -102,8 +102,8 @@ def main(args):
     logging('# model parameters: {}'.format(
         sum(x.data.nelement() for x in model.parameters())), log_file)
 
-    train_batches, _ = get_tokenized_batches(train_sents, args.max_len-1, vocab, args.batch_size, device)
-    valid_batches, _ = get_tokenized_batches(valid_sents, args.max_len-1, vocab, args.batch_size, device)
+    train_batches, _ = get_tokenized_batches(train_sents, vocab, args.batch_size, device)
+    valid_batches, _ = get_tokenized_batches(valid_sents, vocab, args.batch_size, device)
     best_val_loss = None
     for epoch in range(args.epochs):
         start_time = time.time()
