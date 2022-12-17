@@ -28,6 +28,32 @@ parser.add_argument('--batch-size', type=int, default=256, metavar='N',
 parser.add_argument('--max-len', type=int, default=35, metavar='N',
                     help='max sequence length for generation')
 
+parser.add_argument('--evaluate', action='store_true',
+                    help='evaluate on data file')
+parser.add_argument('--ppl', action='store_true',
+                    help='compute ppl by importance sampling')
+parser.add_argument('--reconstruct', action='store_true',
+                    help='reconstruct data file')
+parser.add_argument('--sample', action='store_true',
+                    help='sample sentences from prior')
+parser.add_argument('--arithmetic', action='store_true',
+                    help='compute vector offset avg(b)-avg(a) and apply to c')
+parser.add_argument('--interpolate', action='store_true',
+                    help='interpolate between pairs of sentences')
+parser.add_argument('--latent-nn', action='store_true',
+                    help='find nearest neighbor of sentences in the latent space')
+parser.add_argument('--m', type=int, default=100, metavar='N',
+                    help='num of samples for importance sampling estimate')
+parser.add_argument('--n', type=int, default=5, metavar='N',
+                    help='num of sentences to generate for sample/interpolate')
+parser.add_argument('--k', type=float, default=1, metavar='R',
+                    help='k * offset for vector arithmetic')
+
+parser.add_argument('--seed', type=int, default=1111, metavar='N',
+                    help='random seed')
+parser.add_argument('--no-cuda', action='store_true',
+                    help='disable CUDA')
+
 def encode(sents):
     assert args.enc == 'mu' or args.enc == 'z'
     batches, order = get_tokenized_batches(sents, vocab, args.batch_size, device)
