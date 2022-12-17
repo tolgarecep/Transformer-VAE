@@ -6,7 +6,7 @@ from sklearn.neighbors import NearestNeighbors
 
 from vae import *
 from utils import *
-from corpus_to_tokenized import get_tokenized_batches, Vocab
+from corpus_to_tokenized import get_tokenized_batches, Vocab, load_sent
 from train import evaluate
 
 parser = argparse.ArgumentParser()
