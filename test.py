@@ -54,6 +54,16 @@ parser.add_argument('--seed', type=int, default=1111, metavar='N',
 parser.add_argument('--no-cuda', action='store_true',
                     help='disable CUDA')
 
+def get_model(path):
+    ckpt = torch.load(path)
+    train_args = ckpt['args']
+    model = {'lstm': LSTM_VAE, 'transformer': TRANSFORMER_VAE}[train_args.model_type](
+        vocab, train_args, device).to(device)
+    model.load_state_dict(ckpt['model'])
+    model.flatten()
+    model.eval()
+    return model
+
 def encode(sents):
     assert args.enc == 'mu' or args.enc == 'z'
     batches, order = get_tokenized_batches(sents, vocab, args.batch_size, device)
