@@ -75,11 +75,7 @@ class TRANSFORMER_VAE(VAE):
             d_model=args.dim_h, nhead=args.nhead, dim_feedforward=args.dim_feedforward, dropout=args.dropout) 
             for _ in range(args.nlayers)])
 
-    def flatten(self):
-        for layer in self.EncoderStack:
-            layer.flatten_parameters()
-        for layer in self.DecoderStack:
-            layer.flatten_parameters()
+    # def flatten(self)
             
     def encode(self, src):
         x = self.pe(self.embed(src))
