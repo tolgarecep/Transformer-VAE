@@ -1,3 +1,9 @@
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+
 def reparameterize(mu, logvar):
     std = torch.exp(0.5*logvar)
     eps = torch.randn_like(std)
