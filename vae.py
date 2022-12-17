@@ -110,7 +110,7 @@ class TRANSFORMER_VAE(VAE):
         self.opt.zero_grad()
         losses['loss'].backward()
         self.opt.step()
-"""
+
     def generate(self, z, max_len, alg):
         assert alg in ['greedy' , 'sample' , 'top5']
         sents = []
@@ -127,7 +127,7 @@ class TRANSFORMER_VAE(VAE):
                 logits_exp=logits.exp()
                 logits_exp[:,:,not_top5_indices]=0.
                 input = torch.multinomial(logits_exp.squeeze(dim=0), num_samples=1).t()
-        return torch.cat(sents)"""
+        return torch.cat(sents)
 
 class LSTM_VAE(VAE):
     """LSTM based Variational Auto-encoder"""
