@@ -65,8 +65,8 @@ def evaluate(model, batches):
     model.eval()
     meters = collections.defaultdict(lambda: AverageMeter())
     with torch.no_grad():
-        for inputs, targets in batches:
-            losses = model.autoenc(inputs, targets)
+        for enc_inputs, dec_inputs, targets in batches:
+            losses = model.autoenc(enc_inputs, dec_inputs, targets)
             for k, v in losses.items():
                 meters[k].update(v.item(), inputs.size(1))
     loss = model.loss({k: meter.avg for k, meter in meters.items()})
