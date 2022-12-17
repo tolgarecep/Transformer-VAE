@@ -44,8 +44,8 @@ parser.add_argument('--nhead', type=int, default=6, metavar='N',
                     help='number of heads in the multiheadattention models')
 parser.add_argument('--dim_feedforward', type=int, default=2048, metavar='D',
                     help='dimension of the feedforward network model')
-parser.add_argument('--max_len', type=int, default=512, metavar='L',
-                    help='maximum length for sequences')
+parser.add_argument('--pe_max_len', type=int, default=512, metavar='L',
+                    help='maximum length for PositionalEncoding')
 # Training arguments
 parser.add_argument('--lr', type=float, default=0.0005, metavar='LR',
                     help='learning rate')
