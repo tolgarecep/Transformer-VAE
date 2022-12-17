@@ -76,9 +76,11 @@ class TRANSFORMER_VAE(VAE):
             for _ in range(args.nlayers)])
 
     def flatten(self):
-        self.EncoderStack.flatten_parameters()
-        self.DecoderStack.flatten_parameters()
-        
+        for layer in self.EncoderStack:
+            layer.flatten_parameters()
+        for layer in self.DecoderStack:
+            layer.flatten_parameters()
+            
     def encode(self, src):
         x = self.pe(self.embed(src))
         for layer in self.EncoderStack:
