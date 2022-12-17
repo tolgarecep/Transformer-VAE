@@ -14,3 +14,8 @@ python train.py --train data/yelp/train.txt --valid data/yelp/valid.txt --save-d
                 --dim_z 128 --nlayers 1 --dim_h 1024 --dropout 0.5 \  
                 --model_type lstm --dim_emb 512 
 ```
+
+## Testing
+```console
+python test.py --reconstruct --data data/yelp/test.txt --output test --checkpoint checkpoints/transformer/
+```
