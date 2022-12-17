@@ -60,7 +60,7 @@ def get_model(path):
     model = {'lstm': LSTM_VAE, 'transformer': TRANSFORMER_VAE}[train_args.model_type](
         vocab, train_args, device).to(device)
     model.load_state_dict(ckpt['model'])
-    model.flatten()
+    # model.flatten()
     model.eval()
     return model
 
