@@ -68,14 +68,7 @@ def encode(sents):
     assert args.enc == 'mu' or args.enc == 'z'
     batches, order = get_tokenized_batches(sents, vocab, args.batch_size, device)
     z = []
-    # ‾\_(o_o)_/‾
-    batches_N = []
-    order_N = ()
-    for idx, tensors in enumerate(batches):
-        if tensors[0].shape[1] == 256:
-            batches_N.append(tensors)
-            order_N = order_N + (order[idx],)
-    for enc_inputs, _, _ in batches_N:
+    for enc_inputs, _, _ in batches:
         mu, logvar = model.encode(enc_inputs)
         if args.enc == 'mu':
             zi = mu
@@ -84,7 +77,7 @@ def encode(sents):
         z.append(zi.detach().cpu().numpy())
     z = np.concatenate(z, axis=0)
     z_ = np.zeros_like(z)
-    z_[np.array(order_N)] = z
+    z_[np.array(order)] = z
     return z_
 
 def decode(z):
