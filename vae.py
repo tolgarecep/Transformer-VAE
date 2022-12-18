@@ -81,12 +81,15 @@ class TRANSFORMER_VAE(VAE):
         x = self.pe(self.embed(src))
         for layer in self.EncoderStack:
             x = layer(x)
-        return self.h2mu(x), self.h2logvar(x)
+        return self.h2mu(x[0,:,:]), self.h2logvar(x[0,:,:]) # (N, dim_z)
 
     def decode(self, z, trg):
+        # z: (N, dim_z)
+        # trg: (L, N)
         trg_mask = generate_square_subsequent_mask(trg.shape[0]).to(self.device)
-        x = self.pe(self.embed(trg))
-        memory = self.z2emb(z).to(self.device)
+        x = self.pe(self.embed(trg)) # (L, N, dim_h)
+        memory = self.z2emb(z).to(self.device) 
+        memory = memory.repeat(1, trg.shape[0]).reshape(trg.shape[1], trg.shape[0], -1)
         for layer in self.DecoderStack:
             x = layer(tgt=x, memory=memory, tgt_mask=trg_mask)
         logits = self.proj(x)
