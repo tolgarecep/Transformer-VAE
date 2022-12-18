@@ -73,7 +73,7 @@ def encode(sents):
         # now mu has shape (L, N, dim_z)
         mu_avg = torch.mean(mu, axis=0)
         # mu_avg has shape (N, dim_z)
-        logvar_avg = np.mean(logvar, axis=0)
+        logvar_avg = torch.mean(logvar, axis=0)
         if args.enc == 'mu':
             zi = mu_avg
         else:
