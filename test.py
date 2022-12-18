@@ -74,7 +74,7 @@ def encode(sents):
     for idx, tensors in enumerate(batches):
         if tensors[0].shape[1] == 256:
             batches_N.append(tensors)
-            order_N.append(order[idx])
+            order_N = order_N + (order[idx],)
     for enc_inputs, _, _ in batches_N:
         mu, logvar = model.encode(enc_inputs)
         if args.enc == 'mu':
