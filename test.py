@@ -69,9 +69,9 @@ def encode(sents):
     batches, order = get_tokenized_batches(sents, vocab, args.batch_size, device)
     z = []
     # ‾\_(o_o)_/‾
-    for i in range(len(batches)):
-        if batches[i][0].shape[1] != 256:
-            del batches[i]
+    for tensors in batches:
+        if tensors[0].shape[1] != 256:
+            batches.remove(tensors)
     for enc_inputs, _, _ in batches:
         mu, logvar = model.encode(enc_inputs)
         if args.enc == 'mu':
