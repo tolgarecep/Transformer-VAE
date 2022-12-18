@@ -70,10 +70,14 @@ def encode(sents):
     z = []
     for enc_inputs, _, _ in batches:
         mu, logvar = model.encode(enc_inputs)
+        # now mu has shape (L, N, dim_z)
+        mu_avg = torch.mean(mu, axis=0)
+        # mu_avg has shape (N, dim_z)
+        logvar_avg = np.mean(logvar, axis=0)
         if args.enc == 'mu':
-            zi = mu
+            zi = mu_avg
         else:
-            zi = reparameterize(mu, logvar)
+            zi = reparameterize(mu_avg, logvar_avg)
         z.append(zi.detach().cpu().numpy())
     z = np.concatenate(z, axis=0)
     z_ = np.zeros_like(z)
