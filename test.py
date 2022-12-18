@@ -70,9 +70,11 @@ def encode(sents):
     z = []
     # ‾\_(o_o)_/‾
     batches_N = []
-    for tensors in batches:
+    order_N = ()
+    for idx, tensors in enumerate(batches):
         if tensors[0].shape[1] == 256:
             batches_N.append(tensors)
+            order_N.append(order[idx])
     for enc_inputs, _, _ in batches_N:
         mu, logvar = model.encode(enc_inputs)
         if args.enc == 'mu':
@@ -82,7 +84,7 @@ def encode(sents):
         z.append(zi.detach().cpu().numpy())
     z = np.concatenate(z, axis=0)
     z_ = np.zeros_like(z)
-    z_[np.array(order)] = z
+    z_[np.array(order_N)] = z
     return z_
 
 def decode(z):
