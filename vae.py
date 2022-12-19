@@ -89,7 +89,7 @@ class TRANSFORMER_VAE(VAE):
         trg_mask = generate_square_subsequent_mask(trg.shape[0]).to(self.device)
         x = self.pe(self.embed(trg)) # (L, N, dim_h)
         memory = self.z2emb(z).to(self.device) 
-        memory = memory.repeat(1, trg.shape[0]).reshape(trg.shape[1], trg.shape[0], -1)
+        memory = memory.repeat(1, trg.shape[0]).reshape(trg.shape[0], trg.shape[1], -1)
         for layer in self.DecoderStack:
             x = layer(tgt=x, memory=memory, tgt_mask=trg_mask)
         logits = self.proj(x)
