@@ -71,7 +71,7 @@ def encode(sents):
     for enc_inputs, _, _ in batches:
         mu, logvar = model.encode(enc_inputs)
         if args.enc == 'mu':
-            zi = mu_avg
+            zi = mu
         else:
             zi = reparameterize(mu, logvar)
         z.append(zi.detach().cpu().numpy())
