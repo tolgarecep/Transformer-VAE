@@ -45,6 +45,7 @@ Training data from trwiki, date 20220601. Settings are in the console commands a
 #### 1.5M, 2 epoch
 | latent space | text categorization (7) | sentiment analysis (binary) | sentiment analysis (neu, neg, pos) | text categorization (6)
 | ------------- | ------------- | ------------- | ------------- | ------------- |
-| `dim_z=64` |  |  |  |  |
-| `dim_z=128` |  |  |  |  |
-| `dim_z=256` |  |  |  |  |
+| `dim_z=64` | 0.5156462585034014 | 0.7276014463640016 | 0.806 | 0.499 |
+| `dim_z=128` | 0.5319727891156463 | 0.7420650863800723 | 0.828 | 0.54 |
+
+####
