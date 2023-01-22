@@ -17,9 +17,6 @@ def log_prob(z, mu, logvar):
 def loss_kl(mu, logvar):
     return -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()) / len(mu)
 
-def generate_square_subsequent_mask(sz: int):
-    """Generates an upper-triangular matrix of -inf, with zeros on diag."""
-    return torch.triu(torch.ones(sz, sz) * float('-inf'), diagonal=1)
 
 class VAE(nn.Module):
     def __init__(self, vocab, args, initrange=0.1):
@@ -27,97 +24,65 @@ class VAE(nn.Module):
         self.vocab = vocab
         self.args = args
         self.embed = nn.Embedding(vocab.size, args.dim_emb if args.model_type == 'lstm' else args.dim_h)
-        self.h2mu = nn.Linear(args.dim_h*2 if args.model_type == 'lstm' else args.dim_h, args.dim_z)
-        self.h2logvar = nn.Linear(args.dim_h*2 if args.model_type == 'lstm' else args.dim_h, args.dim_z)
-        self.z2emb = nn.Linear(args.dim_z, args.dim_emb if args.model_type == 'lstm' else args.dim_h)
         self.proj = nn.Linear(args.dim_h, vocab.size)
-        self.opt = optim.Adam(self.parameters(), lr=args.lr, betas=(0.5, 0.999))
-        
+
         self.embed.weight.data.uniform_(-initrange, initrange)
         self.proj.bias.data.zero_()
         self.proj.weight.data.uniform_(-initrange, initrange)
 
 
-class PositionalEncoding(nn.Module):
-    def __init__(self, d_model, dropout, max_len):
-        super().__init__()
-        self.dropout = nn.Dropout(p=dropout)
-
-        position = torch.arange(max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2) * (-np.log(10000.0) / d_model))
-        pe = torch.zeros(max_len, 1, d_model)
-        pe[:, 0, 0::2] = torch.sin(position * div_term)
-        pe[:, 0, 1::2] = torch.cos(position * div_term)
-        self.register_buffer('pe', pe)
-
-    def forward(self, x):
-        """
-        Args:
-            x: Tensor, shape [seq_len, batch_size, embedding_dim]
-        """
-        x = x + self.pe[:x.size(0)]
-        return self.dropout(x)
-
-
 class TRANSFORMER_VAE(VAE):
     """Transformer based Variational Auto-encoder"""
 
-    def __init__(self, vocab, args, device):
+    def __init__(self, vocab, args):
         super().__init__(vocab, args)
-        self.device = device
-        self.pe = PositionalEncoding(d_model=args.dim_h, dropout=args.dropout, max_len=args.pe_max_len)
-        # TransformerEncoderLayer is made up of self-attn and feedforward network.
-        self.EncoderStack = nn.ModuleList([nn.TransformerEncoderLayer(
-            d_model=args.dim_h, nhead=args.nhead, dim_feedforward=args.dim_feedforward, dropout=args.dropout) 
-            for _ in range(args.nlayers)])
-        # TransformerDecoderLayer is made up of self-attn, multi-head-attn and feedforward network.
-        self.DecoderStack = nn.ModuleList([nn.TransformerDecoderLayer(
-            d_model=args.dim_h, nhead=args.nhead, dim_feedforward=args.dim_feedforward, dropout=args.dropout) 
-            for _ in range(args.nlayers)])
+        self.d_model = args.dim_h
+        self.max_len = args.pe_max_len
+        self.drop = nn.Dropout(p=args.dropout)
+        self.encoder = nn.TransformerEncoderLayer(d_model=args.dim_h, nhead=args.nhead, dim_feedforward=args.dim_feedforward, dropout=args.dropout)
+        self.decoder = nn.TransformerDecoderLayer(d_model=args.dim_h, nhead=args.nhead, dim_feedforward=args.dim_feedforward, dropout=args.dropout)
+        self.h2mu = nn.Linear(args.dim_h*2 if args.model_type == 'lstm' else args.dim_h, args.dim_z)
+        self.h2logvar = nn.Linear(args.dim_h*2 if args.model_type == 'lstm' else args.dim_h, args.dim_z)
+        self.z2emb = nn.Linear(args.dim_z, args.dim_emb if args.model_type == 'lstm' else args.dim_h)
+        self.opt = optim.Adam(self.parameters(), lr=args.lr, betas=(0.5, 0.999))
 
-    # def flatten(self)
-            
+    # def flatten(self):
+    #     self.encoder.flatten_parameters()
+    #     self.decoder.flatten_parameters()
+
     def encode(self, src):
-        x = self.pe(self.embed(src))
-        for layer in self.EncoderStack:
-            x = layer(x)
+        x = self.embed(src)
+        # positional encoding
+        position = torch.arange(self.max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, self.d_model, 2) * (-np.log(10000.0) / self.d_model))
+        pe = torch.zeros(self.max_len, 1, self.d_model, device=src.device)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)
+        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        nn.Module.register_buffer('pe', pe)
+        x = x + pe[:x.size(0)]
+
+        x = self.encoder(self.drop(x))
         return self.h2mu(x[0,:,:]), self.h2logvar(x[0,:,:]) # (N, dim_z)
 
     def decode(self, z, trg):
         # z: (N, dim_z)
-        # trg: (L, N)
-        trg_mask = generate_square_subsequent_mask(trg.shape[0]).to(self.device)
-        x = self.pe(self.embed(trg)) # (L, N, dim_h)
-        memory = self.z2emb(z).to(self.device) 
+        # trg: (L, N)        
+        trg_mask = torch.triu(torch.ones(trg.shape[0], trg.shape[0]) * float('-inf'), diagonal=1).to(trg.device)
+        x = self.embed(trg) # (L, N, dim_h)
+        # positional encoding
+        position = torch.arange(self.max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, self.d_model, 2) * (-np.log(10000.0) / self.d_model))
+        pe = torch.zeros(self.max_len, 1, self.d_model, device=trg.device)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)
+        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        nn.Module.register_buffer('pe', pe)
+        x = x + pe[:x.size(0)]
+        
+        memory = self.z2emb(z).to(z.device)
         memory = memory.repeat(1, trg.shape[0]).reshape(trg.shape[0], trg.shape[1], -1)
-        for layer in self.DecoderStack:
-            x = layer(tgt=x, memory=memory, tgt_mask=trg_mask)
+        x = self.decoder(tgt=self.drop(x), memory=memory, tgt_mask=trg_mask)
         logits = self.proj(x)
         return logits
-
-    def forward(self, enc_inputs, dec_inputs, targets):
-        mu, logvar = self.encode(enc_inputs)
-        z = reparameterize(mu, logvar)
-        logits = self.decode(z, dec_inputs)
-        return mu, logvar, z, logits
-
-    def loss_rec(self, logits, targets):
-        loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1),
-            ignore_index=self.vocab.pad, reduction='none').view(targets.size())
-        return loss.sum(dim=0)
-
-    def loss(self, losses):
-        return losses['rec'] + self.args.lambda_kl * losses['kl']
-
-    def autoenc(self, enc_inputs, dec_inputs, targets):
-        mu, logvar, _, logits = self(enc_inputs, dec_inputs, targets)
-        return {'rec': self.loss_rec(logits, targets).mean(),
-                'kl': loss_kl(mu, logvar)}
-
-    def step(self, losses):
-        self.opt.zero_grad()
-        losses['loss'].backward()
-        self.opt.step()
 
     def generate(self, z, max_len, alg):
         assert alg in ['greedy' , 'sample' , 'top5']
@@ -136,6 +101,31 @@ class TRANSFORMER_VAE(VAE):
                 logits_exp[:,:,not_top5_indices]=0.
                 input = torch.multinomial(logits_exp.squeeze(dim=0), num_samples=1).t()
         return torch.cat(sents)
+
+    def forward(self, enc_inputs, dec_inputs):
+        mu, logvar = self.encode(enc_inputs)
+        z = reparameterize(mu, logvar)
+        logits = self.decode(z, dec_inputs)
+        return mu, logvar, z, logits
+
+    def loss_rec(self, logits, targets):
+        loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1),
+            ignore_index=self.vocab.pad, reduction='none').view(targets.size())
+        return loss.sum(dim=0)
+
+    def loss(self, losses):
+        return losses['rec'] + self.args.lambda_kl * losses['kl']
+
+    def autoenc(self, enc_inputs, dec_inputs, targets):
+        mu, logvar, _, logits = self(enc_inputs, dec_inputs)
+        return {'rec': self.loss_rec(logits, targets).mean(),
+                'kl': loss_kl(mu, logvar)}
+
+    def step(self, losses):
+        self.opt.zero_grad()
+        losses['loss'].backward()
+        self.opt.step()
+
 
 class LSTM_VAE(VAE):
     """LSTM based Variational Auto-encoder"""
