@@ -30,14 +30,28 @@ class VAE(nn.Module):
         self.proj.bias.data.zero_()
         self.proj.weight.data.uniform_(-initrange, initrange)
 
+        
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_len):
+        super().__init__()
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-np.log(10000.0) / d_model))
+        pe = torch.zeros(max_len, 1, d_model)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)
+        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        # x: [seq_len, batch_size, embedding_dim]
+        x = x + self.pe[:x.size(0)]
+        return x
 
 class TRANSFORMER_VAE(VAE):
     """Transformer based Variational Auto-encoder"""
 
     def __init__(self, vocab, args):
         super().__init__(vocab, args)
-        self.d_model = args.dim_h
-        self.max_len = args.pe_max_len
+        self.pe = PositionalEncoding(d_model=args.dim_h, max_len=args.pe_max_len)
         self.drop = nn.Dropout(p=args.dropout)
         self.encoder = nn.TransformerEncoderLayer(d_model=args.dim_h, nhead=args.nhead, dim_feedforward=args.dim_feedforward, dropout=args.dropout)
         self.decoder = nn.TransformerDecoderLayer(d_model=args.dim_h, nhead=args.nhead, dim_feedforward=args.dim_feedforward, dropout=args.dropout)
@@ -51,36 +65,18 @@ class TRANSFORMER_VAE(VAE):
     #     self.decoder.flatten_parameters()
 
     def encode(self, src):
-        x = self.embed(src)
-        # positional encoding
-        position = torch.arange(self.max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, self.d_model, 2) * (-np.log(10000.0) / self.d_model))
-        pe = torch.zeros(self.max_len, 1, self.d_model, device=src.device)
-        pe[:, 0, 0::2] = torch.sin(position * div_term)
-        pe[:, 0, 1::2] = torch.cos(position * div_term)
-        nn.Module.register_buffer('pe', pe)
-        x = x + pe[:x.size(0)]
-
-        x = self.encoder(self.drop(x))
+        x = self.drop(self.pe(self.embed(src)))
+        x = self.encoder(x)
         return self.h2mu(x[0,:,:]), self.h2logvar(x[0,:,:]) # (N, dim_z)
 
     def decode(self, z, trg):
         # z: (N, dim_z)
         # trg: (L, N)        
         trg_mask = torch.triu(torch.ones(trg.shape[0], trg.shape[0]) * float('-inf'), diagonal=1).to(trg.device)
-        x = self.embed(trg) # (L, N, dim_h)
-        # positional encoding
-        position = torch.arange(self.max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, self.d_model, 2) * (-np.log(10000.0) / self.d_model))
-        pe = torch.zeros(self.max_len, 1, self.d_model, device=trg.device)
-        pe[:, 0, 0::2] = torch.sin(position * div_term)
-        pe[:, 0, 1::2] = torch.cos(position * div_term)
-        nn.Module.register_buffer('pe', pe)
-        x = x + pe[:x.size(0)]
-        
-        memory = self.z2emb(z).to(z.device)
+        x = self.drop(self.pe(self.embed(trg))) # (L, N, dim_h)
+        memory = self.z2emb(z)
         memory = memory.repeat(1, trg.shape[0]).reshape(trg.shape[0], trg.shape[1], -1)
-        x = self.decoder(tgt=self.drop(x), memory=memory, tgt_mask=trg_mask)
+        x = self.decoder(tgt=x, memory=memory, tgt_mask=trg_mask)
         logits = self.proj(x)
         return logits
 
