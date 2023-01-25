@@ -74,8 +74,6 @@ class TRANSFORMER_VAE(VAE):
         self.DecoderStack = nn.ModuleList([nn.TransformerDecoderLayer(
             d_model=args.dim_h, nhead=args.nhead, dim_feedforward=args.dim_feedforward, dropout=args.dropout) 
             for _ in range(args.nlayers)])
-
-    # def flatten(self)
             
     def encode(self, src):
         x = self.pe(self.embed(src))
@@ -95,7 +93,7 @@ class TRANSFORMER_VAE(VAE):
         logits = self.proj(x)
         return logits
 
-    def forward(self, enc_inputs, dec_inputs, targets):
+    def forward(self, enc_inputs, dec_inputs):
         mu, logvar = self.encode(enc_inputs)
         z = reparameterize(mu, logvar)
         logits = self.decode(z, dec_inputs)
@@ -110,7 +108,7 @@ class TRANSFORMER_VAE(VAE):
         return losses['rec'] + self.args.lambda_kl * losses['kl']
 
     def autoenc(self, enc_inputs, dec_inputs, targets):
-        mu, logvar, _, logits = self(enc_inputs, dec_inputs, targets)
+        mu, logvar, _, logits = self(enc_inputs, dec_inputs)
         return {'rec': self.loss_rec(logits, targets).mean(),
                 'kl': loss_kl(mu, logvar)}
 
