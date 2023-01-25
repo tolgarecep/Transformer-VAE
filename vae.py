@@ -127,7 +127,7 @@ class Transformer_VAE(VAE):
         return mu, logvar, z, logits
     
     def autoenc(self, enc_inputs, dec_inputs, targets):
-        mu, logvar, _, logits = self(enc_inputs, dec_inputs, targets)
+        mu, logvar, _, logits = self(enc_inputs, dec_inputs)
         return {'rec': self.loss_rec(logits, targets).mean(),
                 'kl': loss_kl(mu, logvar)}
 
