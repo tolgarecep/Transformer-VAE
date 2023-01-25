@@ -80,9 +80,9 @@ def main(args):
     logging(str(args), log_file)
     # Prepare data
     train_sents = load_sent(args.train)
-    logging('# train sents {}'.format(len(train_sents), log_file)
+    logging('# train sents {}'.format(len(train_sents)), log_file)
     valid_sents = load_sent(args.valid)
-    logging('# valid sents {}'.format(len(valid_sents), log_file)
+    logging('# valid sents {}'.format(len(valid_sents)), log_file)
     vocab_file = os.path.join(args.save_dir, 'vocab.txt')
     vocab = Vocab(vocab_file)
     logging('# vocab size {}'.format(vocab.size), log_file)
