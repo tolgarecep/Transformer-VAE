@@ -35,7 +35,7 @@ class VAE(nn.Module):
         args.model_type == 'lstm' else args.dim_h, args.dim_z)
         self.z2emb = nn.Linear(args.dim_z, args.dim_emb if
         args.model_type == 'lstm' else args.dim_h)
-        self.proj == nn.Linear(args.dim_h, vocab.size)
+        self.proj = nn.Linear(args.dim_h, vocab.size)
         self.opt = optim.Adam(self.parameters(), lr=args.lr, betas=(0.5, 0.999))
 
         self.embed.weight.data.uniform_(-initrange, initrange)
