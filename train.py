@@ -80,19 +80,16 @@ def main(args):
     logging(str(args), log_file)
     # Prepare data
     train_sents = load_sent(args.train)
-    logging('# train sents {}, tokens {}'.format(
-        len(train_sents), sum(len(s) for s in train_sents)), log_file)
+    logging('# train sents {}'.format(len(train_sents), log_file)
     valid_sents = load_sent(args.valid)
-    logging('# valid sents {}, tokens {}'.format(
-        len(valid_sents), sum(len(s) for s in valid_sents)), log_file)
+    logging('# valid sents {}'.format(len(valid_sents), log_file)
     vocab_file = os.path.join(args.save_dir, 'vocab.txt')
     vocab = Vocab(vocab_file)
     logging('# vocab size {}'.format(vocab.size), log_file)
     set_seed(args.seed)
     cuda = not args.no_cuda and torch.cuda.is_available()
     device = torch.device('cuda' if cuda else 'cpu')
-    model = {'lstm': LSTM_VAE, 'transformer': Transformer_VAE}[
-        args.model_type](vocab, args).to(device)
+    model = {'lstm': LSTM_VAE, 'transformer': Transformer_VAE}[args.model_type](vocab, args).to(device)
     if args.load_model:
         ckpt = torch.load(args.load_model)
         model.load_state_dict(ckpt['model'])
