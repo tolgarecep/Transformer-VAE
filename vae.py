@@ -74,7 +74,7 @@ class Transformer_VAE(VAE):
     """Transformer based Variational Auto-encoder"""
     def __init__(self, vocab, args, initrange=0.1):
         super().__init__(vocab, args)
-        self.pe = PositionalEncoding(d_model=args.dim_h, max_len=args.pe_max_len)
+        self.pe = PositionalEncoding(dim_h=args.dim_h, max_len=args.pe_max_len)
         # TransformerEncoderLayer is made up of self-attn and feedforward network.
         self.EncoderStack = nn.ModuleList([nn.TransformerEncoderLayer(
             d_model=args.dim_h, nhead=args.nhead, dim_feedforward=args.dim_feedforward, dropout=args.dropout) 
