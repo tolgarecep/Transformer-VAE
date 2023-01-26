@@ -26,55 +26,46 @@ class VAE(nn.Module):
         super().__init__()
         self.vocab = vocab
         self.args = args
-        self.embed = nn.Embedding(vocab.size, args.dim_emb if
-        args.model_type == 'lstm' else args.dim_h)
-        self.drop = nn.Dropout(args.dropout)
-        self.h2mu = nn.Linear(args.dim_h*2 if
-        args.model_type == 'lstm' else args.dim_h, args.dim_z)
-        self.h2logvar = nn.Linear(args.dim_h*2 if
-        args.model_type == 'lstm' else args.dim_h, args.dim_z)
-        self.z2emb = nn.Linear(args.dim_z, args.dim_emb if
-        args.model_type == 'lstm' else args.dim_h)
+        self.embed = nn.Embedding(vocab.size, args.dim_emb if args.model_type == 'lstm' else args.dim_h)
+        self.h2mu = nn.Linear(args.dim_h*2 if args.model_type == 'lstm' else args.dim_h, args.dim_z)
+        self.h2logvar = nn.Linear(args.dim_h*2 if args.model_type == 'lstm' else args.dim_h, args.dim_z)
+        self.z2emb = nn.Linear(args.dim_z, args.dim_emb if args.model_type == 'lstm' else args.dim_h)
         self.proj = nn.Linear(args.dim_h, vocab.size)
         self.opt = optim.Adam(self.parameters(), lr=args.lr, betas=(0.5, 0.999))
-
+        
         self.embed.weight.data.uniform_(-initrange, initrange)
         self.proj.bias.data.zero_()
         self.proj.weight.data.uniform_(-initrange, initrange)
 
-    def loss_rec(self, logits, targets):
-        loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1),
-            ignore_index=self.vocab.pad, reduction='none').view(targets.size())
-        return loss.sum(dim=0)
-
-    def loss(self, losses):
-        return losses['rec'] + self.args.lambda_kl * losses['kl']
-
-    def step(self, losses):
-        self.opt.zero_grad()
-        losses['loss'].backward()
-        self.opt.step()
 
 class PositionalEncoding(nn.Module):
-    def __init__(self, dim_h, max_len):
+    def __init__(self, d_model, dropout, max_len):
         super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
         position = torch.arange(max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, dim_h, 2) * (-np.log(10000.0) / dim_h))
-        pe = torch.zeros(max_len, 1, dim_h)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-np.log(10000.0) / d_model))
+        pe = torch.zeros(max_len, 1, d_model)
         pe[:, 0, 0::2] = torch.sin(position * div_term)
         pe[:, 0, 1::2] = torch.cos(position * div_term)
         self.register_buffer('pe', pe)
 
     def forward(self, x):
-        # x: [L, N, dim_h]
+        """
+        Args:
+            x: Tensor, shape [seq_len, batch_size, embedding_dim]
+        """
         x = x + self.pe[:x.size(0)]
-        return x
+        return self.dropout(x)
 
-class Transformer_VAE(VAE):
+
+class TRANSFORMER_VAE(VAE):
     """Transformer based Variational Auto-encoder"""
-    def __init__(self, vocab, args, initrange=0.1):
+
+    def __init__(self, vocab, args, device):
         super().__init__(vocab, args)
-        self.pe = PositionalEncoding(dim_h=args.dim_h, max_len=args.pe_max_len)
+        self.device = device
+        self.pe = PositionalEncoding(d_model=args.dim_h, dropout=args.dropout, max_len=args.pe_max_len)
         # TransformerEncoderLayer is made up of self-attn and feedforward network.
         self.EncoderStack = nn.ModuleList([nn.TransformerEncoderLayer(
             d_model=args.dim_h, nhead=args.nhead, dim_feedforward=args.dim_feedforward, dropout=args.dropout) 
@@ -84,8 +75,10 @@ class Transformer_VAE(VAE):
             d_model=args.dim_h, nhead=args.nhead, dim_feedforward=args.dim_feedforward, dropout=args.dropout) 
             for _ in range(args.nlayers)])
 
+    # def flatten(self)
+            
     def encode(self, src):
-        x = self.drop(self.pe(self.embed(src)))
+        x = self.pe(self.embed(src))
         for layer in self.EncoderStack:
             x = layer(x)
         return self.h2mu(x[0,:,:]), self.h2logvar(x[0,:,:]) # (N, dim_z)
@@ -93,14 +86,38 @@ class Transformer_VAE(VAE):
     def decode(self, z, trg):
         # z: (N, dim_z)
         # trg: (L, N)
-        trg_mask = generate_square_subsequent_mask(trg.shape[0]).to(trg.device)
-        x = self.drop(self.pe(self.embed(trg))) # (L, N, dim_h)
-        memory = self.z2emb(z).to(z.device) 
+        trg_mask = generate_square_subsequent_mask(trg.shape[0]).to(self.device)
+        x = self.pe(self.embed(trg)) # (L, N, dim_h)
+        memory = self.z2emb(z).to(self.device) 
         memory = memory.repeat(1, trg.shape[0]).reshape(trg.shape[0], trg.shape[1], -1)
         for layer in self.DecoderStack:
             x = layer(tgt=x, memory=memory, tgt_mask=trg_mask)
         logits = self.proj(x)
         return logits
+
+    def forward(self, enc_inputs, dec_inputs, targets):
+        mu, logvar = self.encode(enc_inputs)
+        z = reparameterize(mu, logvar)
+        logits = self.decode(z, dec_inputs)
+        return mu, logvar, z, logits
+
+    def loss_rec(self, logits, targets):
+        loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1),
+            ignore_index=self.vocab.pad, reduction='none').view(targets.size())
+        return loss.sum(dim=0)
+
+    def loss(self, losses):
+        return losses['rec'] + self.args.lambda_kl * losses['kl']
+
+    def autoenc(self, enc_inputs, dec_inputs, targets):
+        mu, logvar, _, logits = self(enc_inputs, dec_inputs, targets)
+        return {'rec': self.loss_rec(logits, targets).mean(),
+                'kl': loss_kl(mu, logvar)}
+
+    def step(self, losses):
+        self.opt.zero_grad()
+        losses['loss'].backward()
+        self.opt.step()
 
     def generate(self, z, max_len, alg):
         assert alg in ['greedy' , 'sample' , 'top5']
@@ -120,33 +137,23 @@ class Transformer_VAE(VAE):
                 input = torch.multinomial(logits_exp.squeeze(dim=0), num_samples=1).t()
         return torch.cat(sents)
 
-    def forward(self, enc_inputs, dec_inputs):
-        mu, logvar = self.encode(enc_inputs)
-        z = reparameterize(mu, logvar)
-        logits = self.decode(z, dec_inputs)
-        return mu, logvar, z, logits
-    
-    def autoenc(self, enc_inputs, dec_inputs, targets):
-        mu, logvar, _, logits = self(enc_inputs, dec_inputs)
-        return {'rec': self.loss_rec(logits, targets).mean(),
-                'kl': loss_kl(mu, logvar)}
-
 class LSTM_VAE(VAE):
     """LSTM based Variational Auto-encoder"""
+
     def __init__(self, vocab, args, initrange=0.1):
         super().__init__(vocab, args)
+        self.drop = nn.Dropout(args.dropout)
         self.E = nn.LSTM(args.dim_emb, args.dim_h, args.nlayers,
             dropout=args.dropout if args.nlayers > 1 else 0, bidirectional=True)
         self.G = nn.LSTM(args.dim_emb, args.dim_h, args.nlayers,
             dropout=args.dropout if args.nlayers > 1 else 0)
 
     def flatten(self):
-        # For loading models with RNN
         self.E.flatten_parameters()
         self.G.flatten_parameters()
 
     def encode(self, input):
-        x = self.drop(self.embed(input))
+        input = self.drop(self.embed(input))
         _, (h, _) = self.E(input)
         h = torch.cat([h[-2], h[-1]], 1)
         return self.h2mu(h), self.h2logvar(h)
@@ -157,7 +164,7 @@ class LSTM_VAE(VAE):
         output = self.drop(output)
         logits = self.proj(output.view(-1, output.size(-1)))
         return logits.view(output.size(0), output.size(1), -1), hidden
-    
+
     def generate(self, z, max_len, alg):
         assert alg in ['greedy' , 'sample' , 'top5']
         sents = []
@@ -183,7 +190,20 @@ class LSTM_VAE(VAE):
         logits, _ = self.decode(z, input)
         return mu, logvar, z, logits
 
+    def loss_rec(self, logits, targets):
+        loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1),
+            ignore_index=self.vocab.pad, reduction='none').view(targets.size())
+        return loss.sum(dim=0)
+
+    def loss(self, losses):
+        return losses['rec'] + self.args.lambda_kl * losses['kl']
+
     def autoenc(self, inputs, targets):
         mu, logvar, _, logits = self(inputs)
         return {'rec': self.loss_rec(logits, targets).mean(),
                 'kl': loss_kl(mu, logvar)}
+
+    def step(self, losses):
+        self.opt.zero_grad()
+        losses['loss'].backward()
+        self.opt.step()
