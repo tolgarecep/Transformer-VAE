@@ -57,7 +57,7 @@ parser.add_argument('--no-cuda', action='store_true',
 def get_model(path):
     ckpt = torch.load(path)
     train_args = ckpt['args']
-    model = {'lstm': LSTM_VAE, 'transformer': TRANSFORMER_VAE}[train_args.model_type](vocab, train_args).to(device)
+    model = {'lstm': LSTM_VAE, 'transformer': Transformer_VAE}[train_args.model_type](vocab, train_args).to(device)
     model.load_state_dict(ckpt['model'])
     # model.flatten()
     model.eval()
