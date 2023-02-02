@@ -1,7 +1,7 @@
 import torch
 from collections import Counter
-from transformers import AutoTokenizer
-tokenizer = AutoTokenizer.from_pretrained("dbmdz/bert-base-turkish-cased")
+# from transformers import AutoTokenizer
+# tokenizer = AutoTokenizer.from_pretrained("dbmdz/bert-base-turkish-cased")
 
 class Vocab(object):
     def __init__(self, path):
@@ -49,8 +49,8 @@ def get_batch(x, vocab, model_type, device):
     if model_type == 'transformer':
         enc_input, dec_input, target = [], [], []
         for s in x:
-            t = tokenizer.tokenize(" ".join(s))
-            s_idx = [vocab.word2idx[w] if w in vocab.word2idx else vocab.unk for w in t]
+            # t = tokenizer.tokenize(" ".join(s))
+            s_idx = [vocab.word2idx[w] if w in vocab.word2idx else vocab.unk for w in s]
             padding = [vocab.pad] * (max_len - len(s))
             enc_input.append([vocab.go] + s_idx + padding + [vocab.eos])
             dec_input.append([vocab.go] + s_idx + padding)
