@@ -1,17 +1,6 @@
 # Transformer based Variational Autoencoders - with BERTurk tokenizer
-## Training
 `vocab.txt` in `checkpoints/model_type` is used as vocabulary.
 
-```console
-python train.py --train data/yelp/train.txt --valid data/yelp/valid.txt --save-dir checkpoints/transformer --epochs 1 \  
-                --dim_z 128 --nlayers 1 --dim_h 512 --dropout 0.5 \  
-                --model_type transformer --nhead 8 --dim_feedforward 1024 --pe_max_len 5000
-```
-
-## Testing
-```console
-python test.py --reconstruct --data data/yelp/test.txt --output test --checkpoint checkpoints/transformer/
-```
 ## Results
 Training data from trwiki, date 20220601.
 
