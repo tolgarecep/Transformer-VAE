@@ -50,7 +50,7 @@ def get_batch(x, vocab, model_type, device):
         enc_input, dec_input, target = [], [], []
         for s in x:
             t = tokenizer.tokenize(" ".join(s))
-            s_idx = [vocab.word2idx[w] if w in vocab.word2idx else vocab.unk for w in list(t.split(" "))]
+            s_idx = [vocab.word2idx[w] if w in vocab.word2idx else vocab.unk for w in t]
             padding = [vocab.pad] * (max_len - len(s))
             enc_input.append([vocab.go] + s_idx + padding + [vocab.eos])
             dec_input.append([vocab.go] + s_idx + padding)
