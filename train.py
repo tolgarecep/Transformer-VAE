@@ -126,7 +126,7 @@ def main(args):
         indices = list(range(len(train_batches)))
         random.shuffle(indices)
         for i, idx in enumerate(indices):
-            if args.model_type == 'transformers':
+            if args.model_type == 'transformer':
                 enc_inputs, dec_inputs, targets = train_batches[idx]
                 losses = model.autoenc(enc_inputs, dec_inputs, targets)
             else:
