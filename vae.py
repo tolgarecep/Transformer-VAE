@@ -21,11 +21,27 @@ def generate_square_subsequent_mask(sz: int):
     """Generates an upper-triangular matrix of -inf, with zeros on diag."""
     return torch.triu(torch.ones(sz, sz) * float('-inf'), diagonal=1)
 
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_len):
+        super().__init__()
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-np.log(10000.0) / d_model))
+        pe = torch.zeros(max_len, 1, d_model)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)
+        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        # x: [L, N, dim_emb]
+        x = x + self.pe[:x.size(0)]
+        return x
+
 class VAE(nn.Module):
     def __init__(self, vocab, args, initrange=0.1):
         super().__init__()
         self.vocab = vocab
         self.args = args
+        self.dropout = nn.Dropout(args.dropout)
         self.embed = nn.Embedding(vocab.size, args.dim_emb if args.model_type == 'lstm' else args.dim_h)
         self.h2mu = nn.Linear(args.dim_h*2 if args.model_type == 'lstm' else args.dim_h, args.dim_z)
         self.h2logvar = nn.Linear(args.dim_h*2 if args.model_type == 'lstm' else args.dim_h, args.dim_z)
@@ -37,35 +53,25 @@ class VAE(nn.Module):
         self.proj.bias.data.zero_()
         self.proj.weight.data.uniform_(-initrange, initrange)
 
+    def loss_rec(self, logits, targets):
+        loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1),
+            ignore_index=self.vocab.pad, reduction='none').view(targets.size())
+        return loss.sum(dim=0)
 
-class PositionalEncoding(nn.Module):
-    def __init__(self, d_model, dropout, max_len):
-        super().__init__()
-        self.dropout = nn.Dropout(p=dropout)
+    def loss(self, losses):
+        return losses['rec'] + self.args.lambda_kl * losses['kl']
 
-        position = torch.arange(max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2) * (-np.log(10000.0) / d_model))
-        pe = torch.zeros(max_len, 1, d_model)
-        pe[:, 0, 0::2] = torch.sin(position * div_term)
-        pe[:, 0, 1::2] = torch.cos(position * div_term)
-        self.register_buffer('pe', pe)
-
-    def forward(self, x):
-        """
-        Args:
-            x: Tensor, shape [seq_len, batch_size, embedding_dim]
-        """
-        x = x + self.pe[:x.size(0)]
-        return self.dropout(x)
-
+    def step(self, losses):
+        self.opt.zero_grad()
+        losses['loss'].backward()
+        self.opt.step()
 
 class TRANSFORMER_VAE(VAE):
     """Transformer based Variational Auto-encoder"""
 
-    def __init__(self, vocab, args, device):
+    def __init__(self, vocab, args):
         super().__init__(vocab, args)
-        self.device = device
-        self.pe = PositionalEncoding(d_model=args.dim_h, dropout=args.dropout, max_len=args.pe_max_len)
+        self.pe = PositionalEncoding(d_model=args.dim_h, max_len=args.pe_max_len)
         # TransformerEncoderLayer is made up of self-attn and feedforward network.
         self.EncoderStack = nn.ModuleList([nn.TransformerEncoderLayer(
             d_model=args.dim_h, nhead=args.nhead, dim_feedforward=args.dim_feedforward, dropout=args.dropout) 
@@ -75,8 +81,6 @@ class TRANSFORMER_VAE(VAE):
             d_model=args.dim_h, nhead=args.nhead, dim_feedforward=args.dim_feedforward, dropout=args.dropout) 
             for _ in range(args.nlayers)])
 
-    # def flatten(self)
-            
     def encode(self, src):
         x = self.pe(self.embed(src))
         for layer in self.EncoderStack:
@@ -86,9 +90,9 @@ class TRANSFORMER_VAE(VAE):
     def decode(self, z, trg):
         # z: (N, dim_z)
         # trg: (L, N)
-        trg_mask = generate_square_subsequent_mask(trg.shape[0]).to(self.device)
+        trg_mask = generate_square_subsequent_mask(trg.shape[0]).to(trg.device)
         x = self.pe(self.embed(trg)) # (L, N, dim_h)
-        memory = self.z2emb(z).to(self.device) 
+        memory = self.z2emb(z).to(z.device) 
         memory = memory.repeat(1, trg.shape[0]).reshape(trg.shape[0], trg.shape[1], -1)
         for layer in self.DecoderStack:
             x = layer(tgt=x, memory=memory, tgt_mask=trg_mask)
@@ -101,23 +105,10 @@ class TRANSFORMER_VAE(VAE):
         logits = self.decode(z, dec_inputs)
         return mu, logvar, z, logits
 
-    def loss_rec(self, logits, targets):
-        loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1),
-            ignore_index=self.vocab.pad, reduction='none').view(targets.size())
-        return loss.sum(dim=0)
-
-    def loss(self, losses):
-        return losses['rec'] + self.args.lambda_kl * losses['kl']
-
     def autoenc(self, enc_inputs, dec_inputs, targets):
         mu, logvar, _, logits = self(enc_inputs, dec_inputs, targets)
         return {'rec': self.loss_rec(logits, targets).mean(),
                 'kl': loss_kl(mu, logvar)}
-
-    def step(self, losses):
-        self.opt.zero_grad()
-        losses['loss'].backward()
-        self.opt.step()
 
     def generate(self, z, max_len, alg):
         assert alg in ['greedy' , 'sample' , 'top5']
@@ -142,7 +133,6 @@ class LSTM_VAE(VAE):
 
     def __init__(self, vocab, args, initrange=0.1):
         super().__init__(vocab, args)
-        self.drop = nn.Dropout(args.dropout)
         self.E = nn.LSTM(args.dim_emb, args.dim_h, args.nlayers,
             dropout=args.dropout if args.nlayers > 1 else 0, bidirectional=True)
         self.G = nn.LSTM(args.dim_emb, args.dim_h, args.nlayers,
@@ -190,20 +180,7 @@ class LSTM_VAE(VAE):
         logits, _ = self.decode(z, input)
         return mu, logvar, z, logits
 
-    def loss_rec(self, logits, targets):
-        loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1),
-            ignore_index=self.vocab.pad, reduction='none').view(targets.size())
-        return loss.sum(dim=0)
-
-    def loss(self, losses):
-        return losses['rec'] + self.args.lambda_kl * losses['kl']
-
     def autoenc(self, inputs, targets):
         mu, logvar, _, logits = self(inputs)
         return {'rec': self.loss_rec(logits, targets).mean(),
                 'kl': loss_kl(mu, logvar)}
-
-    def step(self, losses):
-        self.opt.zero_grad()
-        losses['loss'].backward()
-        self.opt.step()
