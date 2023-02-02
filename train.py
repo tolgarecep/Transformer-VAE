@@ -106,7 +106,7 @@ def main(args):
     cuda = not args.no_cuda and torch.cuda.is_available()
     device = torch.device('cuda' if cuda else 'cpu')
 
-    model = {'lstm': LSTM_VAE, 'transformer': TRANSFORMER_VAE}[args.model_type](vocab, args, device).to(device)
+    model = {'lstm': LSTM_VAE, 'transformer': TRANSFORMER_VAE}[args.model_type](vocab, args).to(device)
     if args.load_model:
         ckpt = torch.load(args.load_model)
         model.load_state_dict(ckpt['model'])
