@@ -46,7 +46,7 @@ def load_sent(path):
 
 def get_batch(x, vocab, model_type, device):
     max_len = max([len(s) for s in x])
-    if model_type == 'transformers':
+    if model_type == 'transformer':
         enc_input, dec_input, target = [], [], []
         for s in x:
             t = tokenizer.tokenize(" ".join(s))
