@@ -66,7 +66,7 @@ def get_model(path):
 
 def encode(sents):
     assert args.enc == 'mu' or args.enc == 'z'
-    batches, order = get_tokenized_batches(sents, vocab, args.batch_size, device)
+    batches, order = get_tokenized_batches(sents, vocab, args.model_type, args.batch_size, device)
     z = []
     for enc_inputs, _, _ in batches:
         mu, logvar = model.encode(enc_inputs)
@@ -103,7 +103,7 @@ if __name__ == '__main__':
 
     if args.evaluate:
         sents = load_sent(args.data)
-        batches, _ = get_tokenized_batches(sents, vocab, args.batch_size, device)
+        batches, _ = get_tokenized_batches(sents, vocab, args.model_type, args.batch_size, device)
         meters = evaluate(model, batches)
         print(' '.join(['{} {:.2f},'.format(k, meter.avg)
             for k, meter in meters.items()]))
