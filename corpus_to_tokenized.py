@@ -1,7 +1,6 @@
 import torch
-from collections import Counter
-# from transformers import AutoTokenizer
-# tokenizer = AutoTokenizer.from_pretrained("dbmdz/bert-base-turkish-cased")
+from transformers import AutoTokenizer
+tokenizer = AutoTokenizer.from_pretrained("dbmdz/bert-base-turkish-cased")
 
 class Vocab(object):
     def __init__(self, path):
@@ -44,41 +43,38 @@ def load_sent(path):
             sents.append(line.split())
     return sents
 
-def get_batch(x, vocab, model_type, device):
+def get_batch(x, vocab, device):
+    enc_input, dec_input, target = [], [], []
     max_len = max([len(s) for s in x])
-    if model_type == 'transformer':
-        enc_input, dec_input, target = [], [], []
-        for s in x:
-            # t = tokenizer.tokenize(" ".join(s))
-            s_idx = [vocab.word2idx[w] if w in vocab.word2idx else vocab.unk for w in s]
-            padding = [vocab.pad] * (max_len - len(s))
-            enc_input.append([vocab.go] + s_idx + padding + [vocab.eos])
-            dec_input.append([vocab.go] + s_idx + padding)
-            target.append(s_idx + padding + [vocab.eos])
-        return torch.LongTensor(enc_input).t().contiguous().to(device), \
-            torch.LongTensor(dec_input).t().contiguous().to(device), \
-            torch.LongTensor(target).t().contiguous().to(device)
-    else:
-        go_x, x_eos = [], []
-        for s in x:
-            s_idx = [vocab.word2idx[w] if w in vocab.word2idx else vocab.unk for w in s]
-            padding = [vocab.pad] * (max_len - len(s))
-            go_x.append([vocab.go] + s_idx + padding)
-            x_eos.append(s_idx + [vocab.eos] + padding)
-        return torch.LongTensor(go_x).t().contiguous().to(device), \
-            torch.LongTensor(x_eos).t().contiguous().to(device)
-            
+    for s in x:
+        s_idx = [vocab.word2idx[w] if w in vocab.word2idx else vocab.unk for w in s]
+        padding = [vocab.pad] * (max_len - len(s))
+        enc_input.append([vocab.go] + s_idx + padding + [vocab.eos])
+        dec_input.append([vocab.go] + s_idx + padding)
+        target.append(s_idx + padding + [vocab.eos])
+    return torch.LongTensor(enc_input).t().contiguous().to(device), \
+           torch.LongTensor(dec_input).t().contiguous().to(device), \
+           torch.LongTensor(target).t().contiguous().to(device)  # time * batch
+
+
 def get_tokenized_batches(data, vocab, model_type, batch_size, device):
-    order = range(len(data))
-    z = sorted(zip(order, data), key=lambda i: len(i[1]))
-    order, data = zip(*z)
+    # Tokenize sentences with BERTurk tokenizer
+    data_tokenized = []
+    for i, s in enumerate(data):
+        sentence = ' '.join(s)
+        tokenized = tokenizer.tokenize(sentence)
+        data_tokenized.append(tokenized)
+
+    order = range(len(data_tokenized))
+    z = sorted(zip(order, data_tokenized), key=lambda i: len(i[1]))
+    order, data_tokenized = zip(*z)
 
     batches = []
     i = 0
-    while i < len(data):
+    while i < len(data_tokenized):
         j = i
-        while j < min(len(data), i+batch_size) and len(data[j]) == len(data[i]):
+        while j < min(len(data_tokenized), i+batch_size) and len(data_tokenized[j]) == len(data_tokenized[i]):
             j += 1
-        batches.append(get_batch(data[i: j], vocab, model_type, device))
+        batches.append(get_batch(data_tokenized[i: j], vocab, model_type, device))
         i = j
     return batches, order
