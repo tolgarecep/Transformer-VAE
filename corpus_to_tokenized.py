@@ -43,7 +43,7 @@ def load_sent(path):
             sents.append(line.split())
     return sents
 
-def get_batch(x, vocab, device):
+def get_batch(x, vocab, model_type, device):
     enc_input, dec_input, target = [], [], []
     max_len = max([len(s) for s in x])
     for s in x:
