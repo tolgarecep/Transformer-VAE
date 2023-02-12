@@ -9,6 +9,10 @@
 ### Results
 Training data from trwiki, date 20220601.
 
+#### BERTurk
+Baseline
+
+
 #### LSTM-VAE
 ##### 3M, 1 epoch (# of parameters: ~72M)
 | dim_z | text categorization (7) | sentiment analysis (binary) | sentiment analysis (neu, neg, pos) | text categorization (6)
