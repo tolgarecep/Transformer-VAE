@@ -1,4 +1,4 @@
-Further work is currently in progress at []()
+Further work is currently in progress at [tolgarecep/aggr-transformer-vae](https://github.com/tolgarecep/aggr-transformer-vae)
 
 # Transformer-based Variational Autoencoder
 _This research is supported by TUBITAK, The Scientific and Technological Research Council of Turkey (2247-C)_
